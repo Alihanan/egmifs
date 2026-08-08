@@ -27,7 +27,8 @@ egmifs(
 \arguments{
 \item{X}{Numeric penalized predictor matrix.}
 
-\item{y}{Finite non-negative response vector; the selected family determines the admissible response domain.}
+\item{y}{Finite non-negative response vector. The admissible response domain
+is ultimately determined by the selected family module.}
 
 \item{w}{Numeric unpenalized predictor matrix or \code{NULL}.}
 
@@ -76,6 +77,9 @@ numeric weight vector, or \code{"egmifs_tuning_grid"} when a prior-weight
 specification supplies one or more prior-strength values.
 }
 \description{
-Fits an extended generalized monotone incremental forward-stagewise model
-with interchangeable family/link and criterion modules.
+Fits an extended generalized monotone incremental forward-stagewise model.
+The high-level interface supplies the stagewise engine with interchangeable
+family/link or fused family-link modules and path-selection criteria. Built-in
+modules implement NB2 and Poisson regression; custom plugins can define other
+differentiable models compatible with the response domain and plugin contract.
 }

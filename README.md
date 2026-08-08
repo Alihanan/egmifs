@@ -1,30 +1,32 @@
 # egmifs
 
-`egmifs` is an R/Rcpp/C++ package for extended generalized monotone incremental forward stagewise regression (eGMIFS). The package exposes a reusable solution-path engine rather than tying the stagewise algorithm to one likelihood.
+`egmifs` is an R package for fitting extended generalized monotone incremental forward stagewise models for high-dimensional count data.
 
-The core stagewise path construction is separated from interchangeable family, link, fused family-link, and model-selection modules. Built-in modules provide NB2 and Poisson regression, while the same engine can be extended with live-compiled C++ or R-backed plugins. The public interface also provides elastic-net stagewise updates, prior-weighted penalties, unpenalized covariates, offsets, multi-alpha and alpha-by-prior-strength fitting, information-criterion selection, parameter extraction, diagnostics, and preprocessing helpers for the included count-data applications.
+The package is designed for sparse regression problems where the response is count-valued and the number of predictors may be large relative to the number of samples. It supports negative-binomial and Poisson model families, elastic-net-style stagewise updates, prior-weighted penalties, unpenalized covariates, offsets, and information-criterion-based model selection along the solution path.
 
 ## Installation
 
 Install the package from GitHub:
 
 ```r
-# install.packages("remotes")
+if (!requireNamespace("remotes", quietly = TRUE)) {
+  install.packages("remotes")
+}
 remotes::install_github("Alihanan/egmifs")
 ```
+
+For substantive analyses, increase this value or omit the explicit example control and use the package default.
 
 ## Basic usage
 
 ```r
 library(egmifs)
 
-# Example data
 set.seed(1)
 X <- matrix(rpois(100 * 20, lambda = 5), nrow = 100, ncol = 20)
 colnames(X) <- paste0("X", seq_len(ncol(X)))
 y <- rpois(100, lambda = 10)
 
-# Fit model
 fit <- egmifs(
   X = X,
   y = y,
@@ -32,7 +34,6 @@ fit <- egmifs(
   enet.alpha = 0.75
 )
 
-# Inspect results
 print(fit)
 summary(fit)
 coef(fit, state = "terminal")
@@ -47,62 +48,92 @@ The package includes `mrna97_rnaseq`, an RNA-seq example dataset derived from th
 data(mrna97_rnaseq)
 
 names(mrna97_rnaseq)
-#> [1] "Y"      "X"      "prior"  "truth"  "sample"
-
 dim(mrna97_rnaseq$Y)
-#> 434 97
-
 dim(mrna97_rnaseq$X)
-#> 434 2636
-
 dim(mrna97_rnaseq$prior)
-#> 97 2636
-
 dim(mrna97_rnaseq$truth)
-#> 97 2636
-
-head(mrna97_rnaseq$sample)
 ```
 
-The dataset is stored as a list with five elements:
+For the packaged object used here, `Y` has 434 samples and 97 target mRNAs, `X` has 434 samples and 2636 candidate predictors, and the prior/reference matrices use **predictor-by-target orientation**. Thus, for target `j`, use `prior[, j]` and `truth[, j]`.
 
-* `Y`: response matrix with 434 samples and 97 mRNA target variables.
-* `X`: predictor matrix with 434 samples and 2636 candidate predictor variables.
-* `prior`: binary prior-knowledge matrix with 97 rows and 2636 columns, using target-by-predictor orientation.
-* `truth`: binary ground-truth matrix with the same orientation as `prior`.
-* `sample`: sample-level metadata with fine-grained and higher-level tissue annotations.
-
-A basic single-target fit can be run as follows:
+A single-target prior-weighted fit is therefore:
 
 ```r
+library(egmifs)
 data(mrna97_rnaseq)
 
-j <- 1
+j <- 1L
 
 Y <- mrna97_rnaseq$Y
 X <- mrna97_rnaseq$X
 prior <- mrna97_rnaseq$prior
 
+prior_j <- prior[, j]
+weights <- ifelse(prior_j, 0.1, 1)
+
+stopifnot(length(weights) == ncol(X))
+
 fit <- egmifs(
   X = X,
   y = Y[, j],
-  weight.vec = ifelse(prior[j, ], 0.1, 1),
+  weight.vec = weights,
   family = "negative.binomial",
   enet.alpha = 0.75
 )
 ```
 
-## Preprocessing utilities
+## Packaged T-100 airport passenger-flow dataset
 
-The package includes preprocessing helpers matching the normalization and transformation strategies used in the RNA-seq and airport experiments.
+The package also includes `airport_t100`, a monthly U.S. airport passenger-flow dataset derived from the Bureau of Transportation Statistics T-100 Domestic Segment benchmark. The data cover January 1990 through December 2025, giving 432 monthly observations.
+
+The object contains an airport-level monthly count matrix together with directed route-reference matrices at several temporal-persistence thresholds:
+
+* `GT1`: route observed in at least 1 month;
+* `GT12`: route observed in at least 12 months;
+* `GT120`: route observed in at least 120 months;
+* `GT216`: route observed in at least 216 months;
+* `GT432`: route observed in all 432 months.
+
+The reference matrices use destination-by-origin orientation. For destination airport `i`, the response is the corresponding airport count series and the remaining airport series are candidate predictors.
+
+```r
+library(egmifs)
+data(airport_t100)
+
+i <- 1L
+
+X <- airport_t100$X_out
+y <- airport_t100$X_in[, i]
+truth_i <- airport_t100$GT12[i, ]
+
+stopifnot(
+  ncol(X) == length(truth_i),
+  identical(colnames(X), airport_t100$airport)
+)
+
+fit_airport <- egmifs(
+  X = X,
+  y = y,
+  family = "negative.binomial",
+  enet.alpha = 0.75,
+  control = egmifs.control(
+    stagewise.iteration.max = 500L
+  )
+)
+```
+
+## Preprocessing utilities
 
 For RNA-seq-style count matrices, sample-level normalization can be applied before predictor transformation:
 
 ```r
+library(egmifs)
 data(mrna97_rnaseq)
 
+X <- mrna97_rnaseq$X
+
 X_cpm <- normalize_counts(
-  mrna97_rnaseq$X,
+  X,
   method = "cpm"
 )
 
@@ -114,8 +145,8 @@ X_pre <- transform_predictors(
 
 Available count normalizations are:
 
-* `"none"`: keep the original scale.
-* `"cpm"`: counts per million scaling.
+* `"none"`: keep the original scale;
+* `"cpm"`: counts per million scaling;
 * `"tmm"`: TMM normalization through `edgeR`, if `edgeR` is installed.
 
 Available RNA-seq predictor transformations are:
@@ -130,32 +161,42 @@ Available RNA-seq predictor transformations are:
 For negative-binomial models, the response should usually remain on the original count scale. When a sample-level offset is needed, request the normalization factor and pass it to `egmifs()`:
 
 ```r
+library(egmifs)
+data(mrna97_rnaseq)
+
+X_raw <- mrna97_rnaseq$X
+y <- mrna97_rnaseq$Y[, 1L]
+
 norm <- normalize_counts(
-  mrna97_rnaseq$X,
+  X_raw,
   method = "cpm",
   return.offset = TRUE
 )
 
-X_cpm <- norm$x
+X <- norm$x
 offset <- norm$offset
 
 fit_offset <- egmifs(
-  X = X_cpm,
-  y = mrna97_rnaseq$Y[, 1],
+  X = X,
+  y = y,
   offset = offset,
   family = "negative.binomial"
 )
 ```
 
-For monthly airport passenger-flow matrices, temporal transformations can be applied to reduce seasonal and system-wide temporal effects:
+For monthly airport passenger-flow matrices, temporal transformations can reduce seasonal and system-wide temporal effects:
 
 ```r
+library(egmifs)
 data(airport_t100)
 
+X <- airport_t100$X
+month <- airport_t100$sample
+
 X_air <- transform_time_series(
-  airport_t100$X,
+  X,
   method = "log1p_month_demean",
-  month = airport_t100$sample$month
+  month = month
 )
 ```
 
@@ -171,9 +212,16 @@ Available temporal transformations are:
 
 ## Prior-weighted fitting
 
-Prior information can be supplied through `weight.vec`. Smaller weights reduce the penalty for selected predictors.
+Prior information can be supplied through `weight.vec`. Smaller weights reduce the penalty for selected predictors. This example defines its own data and weights and can be run independently:
 
 ```r
+library(egmifs)
+
+set.seed(2)
+X <- matrix(rpois(100 * 20, lambda = 5), nrow = 100, ncol = 20)
+colnames(X) <- paste0("X", seq_len(ncol(X)))
+y <- rpois(100, lambda = 10)
+
 weights <- rep(1, ncol(X))
 weights[1:5] <- 0.1
 
@@ -186,18 +234,24 @@ fit_prior <- egmifs(
 )
 ```
 
-For the packaged RNA-seq dataset, the prior matrix can be used to construct target-specific penalty weights. Because `prior` has target-by-predictor orientation, use row `j` for target `j`:
+For the packaged RNA-seq dataset, use the **column** corresponding to target `j` because the stored prior matrix is predictor by target:
 
 ```r
+library(egmifs)
 data(mrna97_rnaseq)
 
-j <- 1
+j <- 1L
 
-weights <- ifelse(mrna97_rnaseq$prior[j, ], 0.1, 1)
+X <- mrna97_rnaseq$X
+y <- mrna97_rnaseq$Y[, j]
+prior_j <- mrna97_rnaseq$prior[, j]
+weights <- ifelse(prior_j, 0.1, 1)
+
+stopifnot(length(weights) == ncol(X))
 
 fit_prior <- egmifs(
-  X = mrna97_rnaseq$X,
-  y = mrna97_rnaseq$Y[, j],
+  X = X,
+  y = y,
   weight.vec = weights,
   family = "negative.binomial",
   enet.alpha = 0.75
@@ -206,9 +260,18 @@ fit_prior <- egmifs(
 
 ## Modular families, links, and criteria
 
-Families, link functions, fused family-link implementations, and information criteria are interchangeable modules. Built-in modules avoid runtime compilation and are the simplest choice for ordinary fits:
+Families, link functions, fused family-link implementations, and information criteria are interchangeable modules. Each example below defines its own data.
+
+Built-in modules avoid runtime compilation and are the simplest choice for ordinary fits:
 
 ```r
+library(egmifs)
+
+set.seed(3)
+X <- matrix(rpois(100 * 20, lambda = 5), nrow = 100, ncol = 20)
+colnames(X) <- paste0("X", seq_len(ncol(X)))
+y <- rpois(100, lambda = 10)
+
 fit_modular <- egmifs(
   X = X,
   y = y,
@@ -225,6 +288,13 @@ fit_modular <- egmifs(
 The same fitting interface can mix implementations. For example, the family can remain built in while the link is an R closure and one criterion is live-compiled C++:
 
 ```r
+library(egmifs)
+
+set.seed(4)
+X <- matrix(rpois(100 * 20, lambda = 5), nrow = 100, ncol = 20)
+colnames(X) <- paste0("X", seq_len(ncol(X)))
+y <- rpois(100, lambda = 10)
+
 fit_mixed <- egmifs(
   X = X,
   y = y,
@@ -255,6 +325,13 @@ fit_mixed <- egmifs(
 A fused family-link module can be supplied instead of separate family and link modules:
 
 ```r
+library(egmifs)
+
+set.seed(5)
+X <- matrix(rpois(100 * 20, lambda = 5), nrow = 100, ncol = 20)
+colnames(X) <- paste0("X", seq_len(ncol(X)))
+y <- rpois(100, lambda = 10)
+
 fit_fused <- egmifs(
   X = X,
   y = y,
@@ -267,67 +344,32 @@ fit_fused <- egmifs(
 )
 ```
 
-
-## Custom family and link example beyond the built-ins
-
-The stagewise engine is not coupled to NB2 or Poisson likelihood code. For example, a Bernoulli family and logit inverse link can be supplied entirely from R callbacks while reusing the same path construction:
-
-```r
-bernoulli_family <- r.family(
-  name = "Bernoulli",
-  negloglik = function(y, mu, family.parameters, environment) {
-    mu <- pmin(pmax(mu, 1e-12), 1 - 1e-12)
-    -sum(y * log(mu) + (1 - y) * log1p(-mu))
-  },
-  grad = function(y, mu, family.parameters, environment) {
-    mu <- pmin(pmax(mu, 1e-12), 1 - 1e-12)
-    list(
-      d_negloglik_d_mu = (mu - y) / (mu * (1 - mu)),
-      d_negloglik_d_family_parameters = numeric()
-    )
-  }
-)
-
-logit_link <- r.link(
-  name = "Logit",
-  inverse = function(eta, link.parameters, environment) {
-    plogis(eta)
-  },
-  grad = function(eta, link.parameters, environment) {
-    mu <- plogis(eta)
-    list(
-      d_mu_d_eta = mu * (1 - mu),
-      d_mu_d_link_parameters = matrix(numeric(), length(eta), 0L)
-    )
-  }
-)
-
-fit_binary <- egmifs(
-  X = X,
-  y = as.numeric(y > stats::median(y)),
-  family = bernoulli_family,
-  link = logit_link,
-  enet.alpha = 0.75
-)
-```
-
-The current high-level interface accepts finite non-negative responses; each custom family remains responsible for implementing a likelihood and gradient appropriate for its response domain.
-
 ## Extracting coefficients
 
-`coef()` works for a single path, a multi-alpha fit, and an alpha by prior-strength grid. With no selector it returns the saved penalized-coefficient path:
+The following complete example creates a fit and then extracts several points from its path:
 
 ```r
-beta_path <- coef(fit_modular)
-```
+library(egmifs)
 
-Select the terminal state, one or more information-criterion states, or the nearest saved iterations:
+set.seed(6)
+X <- matrix(rpois(100 * 20, lambda = 5), nrow = 100, ncol = 20)
+colnames(X) <- paste0("X", seq_len(ncol(X)))
+y <- rpois(100, lambda = 10)
 
-```r
-beta_terminal <- coef(
-  fit_modular,
-  state = "terminal"
+fit_modular <- egmifs(
+  X = X,
+  y = y,
+  family = plugin.family.nb2.builtin(),
+  link = plugin.link.log.builtin(),
+  criteria = list(
+    AIC = criterion("AIC", type = "full"),
+    BIC = criterion("BIC", type = "nnz")
+  ),
+  enet.alpha = 0.75
 )
+
+beta_path <- coef(fit_modular)
+beta_terminal <- coef(fit_modular, state = "terminal")
 
 beta_by_criterion <- coef(
   fit_modular,
@@ -347,6 +389,13 @@ beta_by_iteration <- coef(
 For a multi-alpha object, select alpha directly:
 
 ```r
+library(egmifs)
+
+set.seed(7)
+X <- matrix(rpois(100 * 20, lambda = 5), nrow = 100, ncol = 20)
+colnames(X) <- paste0("X", seq_len(ncol(X)))
+y <- rpois(100, lambda = 10)
+
 fit_multi <- egmifs(
   X = X,
   y = y,
@@ -368,6 +417,16 @@ beta_alpha <- coef(
 For a prior-strength grid, select both alpha and eta:
 
 ```r
+library(egmifs)
+
+set.seed(8)
+X <- matrix(rpois(100 * 20, lambda = 5), nrow = 100, ncol = 20)
+colnames(X) <- paste0("X", seq_len(ncol(X)))
+y <- rpois(100, lambda = 10)
+
+weights <- rep(1, ncol(X))
+weights[1:5] <- 0.1
+
 prior_binary <- setNames(
   weights < 1,
   colnames(X)
@@ -399,26 +458,35 @@ beta_grid <- coef(
 )
 ```
 
-
 ## Extracting all fitted parameters
 
-`parameters()` returns every optimized parameter group: penalized coefficients
-(`beta`), unpenalized coefficients (`theta`), family parameters, and link
-parameters. `params()` is the shorter alias.
+`parameters()` returns every optimized parameter group: penalized coefficients (`beta`), unpenalized coefficients (`theta`), family parameters, and link parameters. `params()` is the shorter alias.
 
-With no selector, each component contains its saved path matrix:
+This example defines and fits its own data before calling the accessors:
 
 ```r
+library(egmifs)
+
+set.seed(9)
+X <- matrix(rpois(100 * 20, lambda = 5), nrow = 100, ncol = 20)
+colnames(X) <- paste0("X", seq_len(ncol(X)))
+y <- rpois(100, lambda = 10)
+
+fit_modular <- egmifs(
+  X = X,
+  y = y,
+  family = plugin.family.nb2.builtin(),
+  link = plugin.link.log.builtin(),
+  criteria = list(
+    AIC = criterion("AIC", type = "full"),
+    BIC = criterion("BIC", type = "nnz")
+  ),
+  enet.alpha = 0.75
+)
+
 all_paths <- parameters(fit_modular)
-
 names(all_paths)
-#> [1] "beta"   "theta"  "family" "link"
-```
 
-Select the terminal state or an information-criterion state in the same way as
-with `coef()`:
-
-```r
 terminal_parameters <- params(
   fit_modular,
   state = "terminal"
@@ -433,11 +501,7 @@ bic_parameters$beta
 bic_parameters$theta
 bic_parameters$family
 bic_parameters$link
-```
 
-Individual groups can be extracted directly with the same selectors:
-
-```r
 beta_at_bic <- bparams(
   fit_modular,
   criterion = "BIC.nnz.builtin"
@@ -459,59 +523,34 @@ link_at_terminal <- lparams(
 )
 ```
 
-The preferred compact aliases are `bparams()`, `thparams()`, `fparams()`, and
-`lparams()`. Descriptive aliases are also exported:
+The preferred compact aliases are `bparams()`, `thparams()`, `fparams()`, and `lparams()`. Descriptive aliases such as `beta.parameters()`, `pen.parameters()`, `theta.parameters()`, `nonpen.parameters()`, `family.parameters()`, and `link.parameters()` are also exported.
 
-```r
-beta.parameters(fit_modular)
-beta.params(fit_modular)
-pen.parameters(fit_modular)
-pen.params(fit_modular)
-penparams(fit_modular)
-
-theta.parameters(fit_modular)
-theta.params(fit_modular)
-thetaparams(fit_modular)
-nonpen.parameters(fit_modular)
-nonpen.params(fit_modular)
-nonpenparams(fit_modular)
-npparams(fit_modular)
-
-family.parameters(fit_modular)
-family.params(fit_modular)
-
-link.parameters(fit_modular)
-link.params(fit_modular)
-```
-
-Parameter-free families or links return zero-length vectors for one state and
-zero-column matrices for paths.
-
-The same alpha and eta selectors work for multi-alpha and tuning-grid objects:
-
-```r
-alpha_parameters <- params(
-  fit_multi,
-  alpha = 0.75,
-  criterion = "BIC.builtin"
-)
-
-grid_parameters <- params(
-  fit_grid,
-  alpha = 0.75,
-  eta = 10,
-  criterion = "BIC.builtin"
-)
-```
+Parameter-free families or links return zero-length vectors for one state and zero-column matrices for paths.
 
 ## Inspecting the fitted model modules
 
-Use `family()`, `link()`, and `criteria()` to inspect the modules that were
-actually used for fitting. These accessors report names, parameter counts, the
-original call specification, the constructor name, and the constructor function
-when it can still be resolved.
+The following example is self-contained and shows `family()`, `link()`, and `criteria()` metadata:
 
 ```r
+library(egmifs)
+
+set.seed(10)
+X <- matrix(rpois(100 * 20, lambda = 5), nrow = 100, ncol = 20)
+colnames(X) <- paste0("X", seq_len(ncol(X)))
+y <- rpois(100, lambda = 10)
+
+fit_modular <- egmifs(
+  X = X,
+  y = y,
+  family = plugin.family.nb2.builtin(),
+  link = plugin.link.log.builtin(),
+  criteria = list(
+    AIC = criterion("AIC", type = "full"),
+    BIC = criterion("BIC", type = "nnz")
+  ),
+  enet.alpha = 0.75
+)
+
 family_info <- family(fit_modular)
 family_info$name
 family_info$parameter_count
@@ -528,19 +567,13 @@ criterion_info$criteria[[1L]]$function_name
 criterion_info$selected
 ```
 
-Multi-alpha and tuning-grid objects accept the same `alpha` and `eta` selectors:
-
-```r
-family(fit_multi, alpha = 0.75)
-link(fit_grid, alpha = 0.75, eta = 10)
-criteria(fit_grid, alpha = 0.75, eta = 10)
-```
-
 ## Model-selection criteria
 
 The compact `criterion()` constructor covers the standard criterion and degrees-of-freedom combinations:
 
 ```r
+library(egmifs)
+
 criteria <- list(
   AIC = criterion("AIC", type = "full"),
   BIC_nnz = criterion("BIC", type = "nnz"),
@@ -553,27 +586,28 @@ The older constructors such as `AIC_nnz()` and `BIC_hedf()` remain available for
 
 ## Main features
 
-* Modular forward-stagewise solution paths with interchangeable model components
-* Built-in negative-binomial and Poisson families plus custom family/link plugins
+* Stagewise sparse regression for high-dimensional count outcomes
+* Negative-binomial and Poisson model families
 * Elastic-net mixing through `enet.alpha`
 * Optional prior-weighted penalty rescaling
 * Support for offsets and unpenalized covariates through `offset` and `w`
 * Information-criterion-based solution-path selection
-* Built-in, live-compiled C++, and R-backed family, link, fused family-link, and criterion plugins
-* Runtime-compilable custom C++ criteria with read-only path-state access
-* Public RNA-seq example dataset with prior and ground-truth interaction matrices
+* Runtime-compilable custom C++ selection criteria with read-only context access
+* Public RNA-seq and T-100 airport example datasets
 * R interface with C++ implementation through Rcpp
 
 ## Related paper
 
 This package accompanies the manuscript:
 
-**Extended generalized monotone incremental forward stagewise regression for penalized negative binomial path-following modeling of high-dimensional count data**
+**Extended generalized monotone incremental forward stagewise regression for penalized negative binomial path-following modeling of high-dimensional count data**  
 Alikhan Anuarbekov and Jiří Kléma
 
 The packaged `mrna97_rnaseq` dataset is adapted from the RNA-seq and prior-knowledge setup described in:
 
 Anuarbekov, A. and Kléma, J. (2025). Utilizing RNA-seq data in monotone iterative generalized linear model to elevate prior knowledge quality of the circRNA-miRNA-mRNA regulatory axis. *BMC Bioinformatics*, 26, 139. https://doi.org/10.1186/s12859-025-06161-w
+
+The packaged `airport_t100` dataset is adapted from the U.S. Bureau of Transportation Statistics T-100 Domestic Segment passenger-flow benchmark used in the accompanying eGMIFS study.
 
 Please cite the associated paper if you use this package or dataset in academic work.
 

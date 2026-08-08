@@ -5,8 +5,11 @@
 \alias{egmifs-package}
 \title{egmifs: Extended generalized monotone incremental forward stagewise regression}
 \description{
-Extended generalized monotone incremental forward stagewise regression
-as a modular R/Rcpp/C++ solution-path framework.
+A modular R/Rcpp/C++ framework for extended generalized monotone incremental
+forward stagewise regression. The core path engine is separated from family,
+link, fused family-link, and information-criterion modules. Built-in modules
+provide NB2 and Poisson models, while custom differentiable modules can reuse
+the same stagewise path construction.
 }
 \author{
 \strong{Maintainer}: Alikhan Anuarbekov \email{anuarali@fel.cvut.cz}
