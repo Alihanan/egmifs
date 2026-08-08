@@ -1,0 +1,535 @@
+# egmifs
+
+`egmifs` is an R package for fitting extended generalized monotone incremental forward stagewise models for high-dimensional count data.
+
+The package is designed for sparse regression problems where the response is count-valued and the number of predictors may be large relative to the number of samples. It supports negative-binomial and Poisson model families, elastic-net-style stagewise updates, prior-weighted penalties, unpenalized covariates, offsets, and information-criterion-based model selection along the solution path.
+
+## Installation
+
+Install the package from GitHub:
+
+```r
+# install.packages("remotes")
+remotes::install_github("Alihanan/egmifs")
+```
+
+## Basic usage
+
+```r
+library(egmifs)
+
+# Example data
+set.seed(1)
+X <- matrix(rpois(100 * 20, lambda = 5), nrow = 100, ncol = 20)
+colnames(X) <- paste0("X", seq_len(ncol(X)))
+y <- rpois(100, lambda = 10)
+
+# Fit model
+fit <- egmifs(
+  X = X,
+  y = y,
+  family = "negative.binomial",
+  enet.alpha = 0.75
+)
+
+# Inspect results
+print(fit)
+summary(fit)
+coef(fit, state = "terminal")
+plot(fit)
+```
+
+## Packaged RNA-seq example dataset
+
+The package includes `mrna97_rnaseq`, an RNA-seq example dataset derived from the regulatory-network setting described by Anuarbekov and Kléma (2025). The original test set used in the paper is not included in this package dataset.
+
+```r
+data(mrna97_rnaseq)
+
+names(mrna97_rnaseq)
+#> [1] "Y"      "X"      "prior"  "truth"  "sample"
+
+dim(mrna97_rnaseq$Y)
+#> 434 97
+
+dim(mrna97_rnaseq$X)
+#> 434 2636
+
+dim(mrna97_rnaseq$prior)
+#> 97 2636
+
+dim(mrna97_rnaseq$truth)
+#> 97 2636
+
+head(mrna97_rnaseq$sample)
+```
+
+The dataset is stored as a list with five elements:
+
+* `Y`: response matrix with 434 samples and 97 mRNA target variables.
+* `X`: predictor matrix with 434 samples and 2636 candidate predictor variables.
+* `prior`: binary prior-knowledge matrix with 97 rows and 2636 columns, using target-by-predictor orientation.
+* `truth`: binary ground-truth matrix with the same orientation as `prior`.
+* `sample`: sample-level metadata with fine-grained and higher-level tissue annotations.
+
+A basic single-target fit can be run as follows:
+
+```r
+data(mrna97_rnaseq)
+
+j <- 1
+
+Y <- mrna97_rnaseq$Y
+X <- mrna97_rnaseq$X
+prior <- mrna97_rnaseq$prior
+
+fit <- egmifs(
+  X = X,
+  y = Y[, j],
+  weight.vec = ifelse(prior[j, ], 0.1, 1),
+  family = "negative.binomial",
+  enet.alpha = 0.75
+)
+```
+
+## Preprocessing utilities
+
+The package includes preprocessing helpers matching the normalization and transformation strategies used in the RNA-seq and airport experiments.
+
+For RNA-seq-style count matrices, sample-level normalization can be applied before predictor transformation:
+
+```r
+data(mrna97_rnaseq)
+
+X_cpm <- normalize_counts(
+  mrna97_rnaseq$X,
+  method = "cpm"
+)
+
+X_pre <- transform_predictors(
+  X_cpm,
+  method = "standardize_log1p"
+)
+```
+
+Available count normalizations are:
+
+* `"none"`: keep the original scale.
+* `"cpm"`: counts per million scaling.
+* `"tmm"`: TMM normalization through `edgeR`, if `edgeR` is installed.
+
+Available RNA-seq predictor transformations are:
+
+* `"none"`
+* `"log1p"`
+* `"asinh"`
+* `"standardize"`
+* `"standardize_log1p"`
+* `"standardize_asinh"`
+
+For negative-binomial models, the response should usually remain on the original count scale. When a sample-level offset is needed, request the normalization factor and pass it to `egmifs()`:
+
+```r
+norm <- normalize_counts(
+  mrna97_rnaseq$X,
+  method = "cpm",
+  return.offset = TRUE
+)
+
+X_cpm <- norm$x
+offset <- norm$offset
+
+fit_offset <- egmifs(
+  X = X_cpm,
+  y = mrna97_rnaseq$Y[, 1],
+  offset = offset,
+  family = "negative.binomial"
+)
+```
+
+For monthly airport passenger-flow matrices, temporal transformations can be applied to reduce seasonal and system-wide temporal effects:
+
+```r
+data(airport_t100)
+
+X_air <- transform_time_series(
+  airport_t100$X,
+  method = "log1p_month_demean",
+  month = airport_t100$sample$month
+)
+```
+
+Available temporal transformations are:
+
+* `"none"`
+* `"log1p_month_demean"`
+* `"month_z"`
+* `"log1p_month_z"`
+* `"log1p_gaussian_smooth"`
+* `"log1p_gaussian_smooth_month_demean"`
+* `"log1p_diff1"`
+
+## Prior-weighted fitting
+
+Prior information can be supplied through `weight.vec`. Smaller weights reduce the penalty for selected predictors.
+
+```r
+weights <- rep(1, ncol(X))
+weights[1:5] <- 0.1
+
+fit_prior <- egmifs(
+  X = X,
+  y = y,
+  weight.vec = weights,
+  family = "negative.binomial",
+  enet.alpha = 0.75
+)
+```
+
+For the packaged RNA-seq dataset, the prior matrix can be used to construct target-specific penalty weights. Because `prior` has target-by-predictor orientation, use row `j` for target `j`:
+
+```r
+data(mrna97_rnaseq)
+
+j <- 1
+
+weights <- ifelse(mrna97_rnaseq$prior[j, ], 0.1, 1)
+
+fit_prior <- egmifs(
+  X = mrna97_rnaseq$X,
+  y = mrna97_rnaseq$Y[, j],
+  weight.vec = weights,
+  family = "negative.binomial",
+  enet.alpha = 0.75
+)
+```
+
+## Modular families, links, and criteria
+
+Families, link functions, fused family-link implementations, and information criteria are interchangeable modules. Built-in modules avoid runtime compilation and are the simplest choice for ordinary fits:
+
+```r
+fit_modular <- egmifs(
+  X = X,
+  y = y,
+  family = plugin.family.nb2.builtin(),
+  link = plugin.link.log.builtin(),
+  criteria = list(
+    AIC = criterion("AIC", type = "full"),
+    BIC = criterion("BIC", type = "nnz")
+  ),
+  enet.alpha = 0.75
+)
+```
+
+The same fitting interface can mix implementations. For example, the family can remain built in while the link is an R closure and one criterion is live-compiled C++:
+
+```r
+fit_mixed <- egmifs(
+  X = X,
+  y = y,
+  family = plugin.family.nb2.builtin(),
+  link = plugin.link.capped.log.r.closure(
+    mu.min.cap = 1e-12,
+    mu.max.cap = 1e12
+  ),
+  criteria = list(
+    EBIC = criterion(
+      "EBIC",
+      type = "nnz",
+      gamma = 0.5
+    ),
+    AIC_live = criterion(
+      "AIC",
+      type = "full",
+      implementation = "live",
+      cache = TRUE
+    )
+  ),
+  enet.alpha = 0.75
+)
+```
+
+`gamma` is specific to EBIC. `cache` is specific to `implementation = "live"`. The available criterion implementations are `"builtin"`, `"live"`, `"r.environment"`, and `"r.closure"`.
+
+A fused family-link module can be supplied instead of separate family and link modules:
+
+```r
+fit_fused <- egmifs(
+  X = X,
+  y = y,
+  family.link = plugin.family.link.nb2.log.builtin(),
+  criteria = list(
+    AIC = criterion("AIC", type = "full"),
+    BIC = criterion("BIC", type = "full")
+  ),
+  enet.alpha = 0.75
+)
+```
+
+## Extracting coefficients
+
+`coef()` works for a single path, a multi-alpha fit, and an alpha by prior-strength grid. With no selector it returns the saved penalized-coefficient path:
+
+```r
+beta_path <- coef(fit_modular)
+```
+
+Select the terminal state, one or more information-criterion states, or the nearest saved iterations:
+
+```r
+beta_terminal <- coef(
+  fit_modular,
+  state = "terminal"
+)
+
+beta_by_criterion <- coef(
+  fit_modular,
+  criterion = c(
+    "AIC.builtin",
+    "BIC.nnz.builtin"
+  )
+)
+
+beta_by_iteration <- coef(
+  fit_modular,
+  iteration = c(50, 100),
+  include.theta = TRUE
+)
+```
+
+For a multi-alpha object, select alpha directly:
+
+```r
+fit_multi <- egmifs(
+  X = X,
+  y = y,
+  family = "negative.binomial",
+  enet.alpha = c(0.50, 0.75, 1.00),
+  criteria = list(
+    AIC = criterion("AIC", type = "full"),
+    BIC = criterion("BIC", type = "full")
+  )
+)
+
+beta_alpha <- coef(
+  fit_multi,
+  alpha = 0.75,
+  criterion = "BIC.builtin"
+)
+```
+
+For a prior-strength grid, select both alpha and eta:
+
+```r
+prior_binary <- setNames(
+  weights < 1,
+  colnames(X)
+)
+
+weight_prior <- egmifs.weight.prior(
+  prior = prior_binary,
+  eta = c(1, 10, 100),
+  label = "Example prior"
+)
+
+fit_grid <- egmifs(
+  X = X,
+  y = y,
+  weight.vec = weight_prior,
+  enet.alpha = c(0.50, 0.75, 1.00),
+  family = "negative.binomial",
+  criteria = list(
+    AIC = criterion("AIC", type = "full"),
+    BIC = criterion("BIC", type = "full")
+  )
+)
+
+beta_grid <- coef(
+  fit_grid,
+  alpha = 0.75,
+  eta = 10,
+  criterion = "BIC.builtin"
+)
+```
+
+
+## Extracting all fitted parameters
+
+`parameters()` returns every optimized parameter group: penalized coefficients
+(`beta`), unpenalized coefficients (`theta`), family parameters, and link
+parameters. `params()` is the shorter alias.
+
+With no selector, each component contains its saved path matrix:
+
+```r
+all_paths <- parameters(fit_modular)
+
+names(all_paths)
+#> [1] "beta"   "theta"  "family" "link"
+```
+
+Select the terminal state or an information-criterion state in the same way as
+with `coef()`:
+
+```r
+terminal_parameters <- params(
+  fit_modular,
+  state = "terminal"
+)
+
+bic_parameters <- params(
+  fit_modular,
+  criterion = "BIC.nnz.builtin"
+)
+
+bic_parameters$beta
+bic_parameters$theta
+bic_parameters$family
+bic_parameters$link
+```
+
+Individual groups can be extracted directly with the same selectors:
+
+```r
+beta_at_bic <- bparams(
+  fit_modular,
+  criterion = "BIC.nnz.builtin"
+)
+
+theta_at_terminal <- thparams(
+  fit_modular,
+  state = "terminal"
+)
+
+family_at_bic <- fparams(
+  fit_modular,
+  criterion = "BIC.nnz.builtin"
+)
+
+link_at_terminal <- lparams(
+  fit_modular,
+  state = "terminal"
+)
+```
+
+The preferred compact aliases are `bparams()`, `thparams()`, `fparams()`, and
+`lparams()`. Descriptive aliases are also exported:
+
+```r
+beta.parameters(fit_modular)
+beta.params(fit_modular)
+pen.parameters(fit_modular)
+pen.params(fit_modular)
+penparams(fit_modular)
+
+theta.parameters(fit_modular)
+theta.params(fit_modular)
+thetaparams(fit_modular)
+nonpen.parameters(fit_modular)
+nonpen.params(fit_modular)
+nonpenparams(fit_modular)
+npparams(fit_modular)
+
+family.parameters(fit_modular)
+family.params(fit_modular)
+
+link.parameters(fit_modular)
+link.params(fit_modular)
+```
+
+Parameter-free families or links return zero-length vectors for one state and
+zero-column matrices for paths.
+
+The same alpha and eta selectors work for multi-alpha and tuning-grid objects:
+
+```r
+alpha_parameters <- params(
+  fit_multi,
+  alpha = 0.75,
+  criterion = "BIC.builtin"
+)
+
+grid_parameters <- params(
+  fit_grid,
+  alpha = 0.75,
+  eta = 10,
+  criterion = "BIC.builtin"
+)
+```
+
+## Inspecting the fitted model modules
+
+Use `family()`, `link()`, and `criteria()` to inspect the modules that were
+actually used for fitting. These accessors report names, parameter counts, the
+original call specification, the constructor name, and the constructor function
+when it can still be resolved.
+
+```r
+family_info <- family(fit_modular)
+family_info$name
+family_info$parameter_count
+family_info$function_name
+family_info$constructor
+
+link_info <- link(fit_modular)
+link_info$name
+link_info$call
+
+criterion_info <- criteria(fit_modular)
+names(criterion_info$criteria)
+criterion_info$criteria[[1L]]$function_name
+criterion_info$selected
+```
+
+Multi-alpha and tuning-grid objects accept the same `alpha` and `eta` selectors:
+
+```r
+family(fit_multi, alpha = 0.75)
+link(fit_grid, alpha = 0.75, eta = 10)
+criteria(fit_grid, alpha = 0.75, eta = 10)
+```
+
+## Model-selection criteria
+
+The compact `criterion()` constructor covers the standard criterion and degrees-of-freedom combinations:
+
+```r
+criteria <- list(
+  AIC = criterion("AIC", type = "full"),
+  BIC_nnz = criterion("BIC", type = "nnz"),
+  SABIC_hedf = criterion("SABIC", type = "hedf"),
+  EBIC = criterion("EBIC", type = "nnz", gamma = 0.5)
+)
+```
+
+The older constructors such as `AIC_nnz()` and `BIC_hedf()` remain available for compatibility.
+
+## Main features
+
+* Stagewise sparse regression for high-dimensional count outcomes
+* Negative-binomial and Poisson model families
+* Elastic-net mixing through `enet.alpha`
+* Optional prior-weighted penalty rescaling
+* Support for offsets and unpenalized covariates through `offset` and `w`
+* Information-criterion-based solution-path selection
+* Runtime-compilable custom C++ selection criteria with read-only context access
+* Public RNA-seq example dataset with prior and ground-truth interaction matrices
+* R interface with C++ implementation through Rcpp
+
+## Related paper
+
+This package accompanies the manuscript:
+
+**Extended generalized monotone incremental forward stagewise regression for penalized negative binomial path-following modeling of high-dimensional count data**
+Alikhan Anuarbekov and Jiří Kléma
+
+The packaged `mrna97_rnaseq` dataset is adapted from the RNA-seq and prior-knowledge setup described in:
+
+Anuarbekov, A. and Kléma, J. (2025). Utilizing RNA-seq data in monotone iterative generalized linear model to elevate prior knowledge quality of the circRNA-miRNA-mRNA regulatory axis. *BMC Bioinformatics*, 26, 139. https://doi.org/10.1186/s12859-025-06161-w
+
+Please cite the associated paper if you use this package or dataset in academic work.
+
+## License
+
+This package is licensed under the MIT License. See the `LICENSE` file for details.

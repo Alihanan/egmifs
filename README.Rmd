@@ -1,0 +1,36 @@
+---
+output: github_document
+---
+
+<!-- README.md is generated from README.Rmd. Please edit that file -->
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  fig.path = "man/figures/README-",
+  out.width = "100%"
+)
+```
+
+# egmifs
+
+`egmifs` implements extended generalized monotone incremental forward stagewise regression (eGMIFS) as a modular R/Rcpp/C++ solution-path framework. Built-in NB2 and Poisson components can be combined with custom family, link, fused family-link, and information-criterion plugins.
+
+For the complete user-facing examples, see `README.md` and the package vignettes.
+
+## Installation
+
+```r
+# install.packages("remotes")
+remotes::install_github("Alihanan/egmifs")
+```
+
+## Basic usage
+
+```{r example, eval = FALSE}
+library(egmifs)
+fit <- egmifs(X, y, enet.alpha = 0.75)
+summary(fit)
+plot(fit)
+```

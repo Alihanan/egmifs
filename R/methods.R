@@ -1,0 +1,1836 @@
+.egmifs.path.states <- function(object, required = TRUE) {
+  states <- NULL
+
+  if (!is.null(object$path$states)) {
+    states <- object$path$states
+  } else if (!is.null(object$states)) {
+    # Compatibility with early development objects.
+    states <- object$states
+  }
+
+  if (
+      isTRUE(required) &&
+      (
+        is.null(states) ||
+          is.null(states$beta) ||
+          length(states$beta) == 0L
+      )
+  ) {
+    stop(
+      paste0(
+        "No saved coefficient path is available. Fit with a state-tracking ",
+        "strategy other than 'none'."
+      ),
+      call. = FALSE
+    )
+  }
+
+  states
+}
+
+
+.egmifs.terminal.state <- function(object) {
+  if (!is.null(object$terminal_state)) {
+    return(object$terminal_state)
+  }
+
+  states <- .egmifs.path.states(object)
+  index <- length(states$beta)
+
+  list(
+    predictors = list(
+      parameters = list(
+        beta = states$beta[[index]],
+        theta = states$theta[[index]],
+        family_parameters = states$family_parameters[[index]],
+        link_parameters = states$link_parameters[[index]]
+      ),
+      xbeta = states$xbeta[[index]],
+      wtheta = states$wtheta[[index]],
+      eta = states$eta[[index]],
+      mu = states$mu[[index]],
+      active_set = states$active_set[[index]]
+    ),
+    negloglik = states$negloglik[[index]],
+    criteria = vapply(
+      states$criteria,
+      function(value) value[[index]],
+      numeric(1L)
+    ),
+    iteration = states$iteration[[index]],
+    pseudo_r2 = states$pseudo_r2[[index]],
+    elapsed_time = states$elapsed_time[[index]]
+  )
+}
+
+
+.egmifs.plugin.label <- function(value, fallback = "Unknown") {
+  if (is.null(value)) {
+    return(fallback)
+  }
+
+  if (is.list(value) && length(value) > 0L) {
+    value_names <- names(value)
+
+    if (
+        !is.null(value_names) &&
+        length(value_names) > 0L &&
+        nzchar(value_names[[1L]])
+    ) {
+      return(value_names[[1L]])
+    }
+  }
+
+  if (
+      is.character(value) &&
+      length(value) >= 1L &&
+      !is.na(value[[1L]])
+  ) {
+    return(value[[1L]])
+  }
+
+  # Compatibility with the original enum-based result format.
+  if (is.numeric(value) && length(value) == 1L && !is.na(value)) {
+    return(as.character(value))
+  }
+
+  fallback
+}
+
+
+.egmifs.input.view <- function(object) {
+  if (
+      is.list(object) &&
+      !is.null(object$input) &&
+      is.list(object$input)
+  ) {
+    return(object$input)
+  }
+
+  object
+}
+
+
+.egmifs.family.label <- function(object) {
+  input <- .egmifs.input.view(object)
+
+  value <- if (is.list(input) && !is.null(input$family)) {
+    input$family
+  } else {
+    input
+  }
+
+  # Compatibility with the original enum-based output.
+  if (is.numeric(value) && length(value) == 1L && !is.na(value)) {
+    return(
+      switch(
+        as.character(as.integer(value)),
+        "0" = "NEGATIVE_BINOMIAL",
+        "1" = "POISSON",
+        as.character(value)
+      )
+    )
+  }
+
+  .egmifs.plugin.label(
+    value,
+    fallback = "Unknown family"
+  )
+}
+
+
+.egmifs.link.label <- function(object) {
+  input <- .egmifs.input.view(object)
+
+  value <- if (is.list(input) && !is.null(input$link_func)) {
+    input$link_func
+  } else {
+    input
+  }
+
+  # Compatibility with the original enum-based output.
+  if (is.numeric(value) && length(value) == 1L && !is.na(value)) {
+    return(
+      switch(
+        as.character(as.integer(value)),
+        "0" = "LOG_LINK",
+        "1" = "SOFTPLUS_LINK",
+        as.character(value)
+      )
+    )
+  }
+
+  .egmifs.plugin.label(
+    value,
+    fallback = "Unknown link"
+  )
+}
+
+
+.egmifs.interface.label <- function(object) {
+  input <- .egmifs.input.view(object)
+
+  if (
+      is.list(input) &&
+      !is.null(input$family_link_supplied)
+  ) {
+    return(
+      if (isTRUE(input$family_link_supplied)) {
+        "combined (fused family-link)"
+      } else {
+        "separate family and link"
+      }
+    )
+  }
+
+  "unknown"
+}
+
+
+.egmifs.predictor.names <- function(object, p = NULL) {
+  if (is.null(p)) {
+    p <- object$input$p
+  }
+
+  candidate <- object$input$predictor_names
+
+  if (is.null(candidate) && !is.null(object$input$X)) {
+    candidate <- colnames(object$input$X)
+  }
+
+  if (is.null(candidate)) {
+    terminal <- tryCatch(
+      .egmifs.terminal.state(object),
+      error = function(error) NULL
+    )
+
+    if (!is.null(terminal)) {
+      candidate <- names(
+        terminal$predictors$parameters$beta
+      )
+    }
+  }
+
+  if (
+      is.null(candidate) ||
+      length(candidate) != p ||
+      anyNA(candidate) ||
+      any(!nzchar(candidate))
+  ) {
+    candidate <- paste0("X", seq_len(p))
+  }
+
+  make.unique(as.character(candidate))
+}
+
+
+.egmifs.unpenalized.names <- function(object, q = NULL) {
+  if (is.null(q)) {
+    q <- object$input$q
+  }
+
+  candidate <- object$input$unpenalized_names
+
+  if (is.null(candidate) && !is.null(object$input$w)) {
+    candidate <- colnames(object$input$w)
+  }
+
+  if (is.null(candidate)) {
+    terminal <- tryCatch(
+      .egmifs.terminal.state(object),
+      error = function(error) NULL
+    )
+
+    if (!is.null(terminal)) {
+      candidate <- names(
+        terminal$predictors$parameters$theta
+      )
+    }
+  }
+
+  if (
+      is.null(candidate) ||
+      length(candidate) != q ||
+      anyNA(candidate) ||
+      any(!nzchar(candidate))
+  ) {
+    candidate <- paste0("theta", seq_len(q))
+  }
+
+  make.unique(as.character(candidate))
+}
+
+
+
+.egmifs.name.vector <- function(value, labels) {
+  if (
+      !is.null(value) &&
+      length(value) == length(labels)
+  ) {
+    names(value) <- labels
+  }
+
+  value
+}
+
+
+.egmifs.name.state <- function(
+    state,
+    predictor.names,
+    unpenalized.names
+) {
+  if (
+      is.null(state) ||
+      is.null(state$predictors) ||
+      is.null(state$predictors$parameters)
+  ) {
+    return(state)
+  }
+
+  state$predictors$parameters$beta <-
+    .egmifs.name.vector(
+      state$predictors$parameters$beta,
+      predictor.names
+    )
+
+  state$predictors$parameters$theta <-
+    .egmifs.name.vector(
+      state$predictors$parameters$theta,
+      unpenalized.names
+    )
+
+  if (!is.null(state$predictors$active_set)) {
+    state$predictors$active_set <-
+      .egmifs.name.vector(
+        state$predictors$active_set,
+        predictor.names
+      )
+  }
+
+  state
+}
+
+
+.egmifs.assign.parameter.names <- function(
+    object,
+    predictor.names = NULL,
+    unpenalized.names = NULL
+) {
+  if (!is.list(object) || is.null(object$input)) {
+    stop(
+      "`object` is not in the expected egmifs result format.",
+      call. = FALSE
+    )
+  }
+
+  terminal <- .egmifs.terminal.state(object)
+  terminal_parameters <- terminal$predictors$parameters
+
+  p <- if (!is.null(object$input$p)) {
+    as.integer(object$input$p)
+  } else {
+    length(terminal_parameters$beta)
+  }
+
+  q <- if (!is.null(object$input$q)) {
+    as.integer(object$input$q)
+  } else {
+    length(terminal_parameters$theta)
+  }
+
+  if (is.null(predictor.names)) {
+    predictor.names <- object$input$predictor_names
+  }
+
+  if (
+      is.null(predictor.names) &&
+      !is.null(object$input$X)
+  ) {
+    predictor.names <- colnames(object$input$X)
+  }
+
+  if (is.null(predictor.names)) {
+    predictor.names <- names(terminal_parameters$beta)
+  }
+
+  if (
+      is.null(predictor.names) ||
+      length(predictor.names) != p ||
+      anyNA(predictor.names) ||
+      any(!nzchar(as.character(predictor.names)))
+  ) {
+    predictor.names <- paste0("X", seq_len(p))
+  }
+
+  predictor.names <- make.unique(
+    as.character(predictor.names)
+  )
+
+  if (is.null(unpenalized.names)) {
+    unpenalized.names <- object$input$unpenalized_names
+  }
+
+  if (
+      is.null(unpenalized.names) &&
+      !is.null(object$input$w)
+  ) {
+    unpenalized.names <- colnames(object$input$w)
+  }
+
+  if (is.null(unpenalized.names)) {
+    unpenalized.names <- names(terminal_parameters$theta)
+  }
+
+  if (
+      is.null(unpenalized.names) ||
+      length(unpenalized.names) != q ||
+      anyNA(unpenalized.names) ||
+      any(!nzchar(as.character(unpenalized.names)))
+  ) {
+    unpenalized.names <- paste0("theta", seq_len(q))
+  }
+
+  unpenalized.names <- make.unique(
+    as.character(unpenalized.names)
+  )
+
+  object$input$predictor_names <- predictor.names
+  object$input$unpenalized_names <- unpenalized.names
+
+  if (
+      !is.null(object$input$X) &&
+      is.matrix(object$input$X) &&
+      ncol(object$input$X) == length(predictor.names)
+  ) {
+    colnames(object$input$X) <- predictor.names
+  }
+
+  if (
+      !is.null(object$input$w) &&
+      is.matrix(object$input$w) &&
+      ncol(object$input$w) == length(unpenalized.names)
+  ) {
+    colnames(object$input$w) <- unpenalized.names
+  }
+
+  if (!is.null(object$input$weight_vec)) {
+    object$input$weight_vec <-
+      .egmifs.name.vector(
+        object$input$weight_vec,
+        predictor.names
+      )
+  }
+
+  if (!is.null(object$terminal_state)) {
+    object$terminal_state <- .egmifs.name.state(
+      object$terminal_state,
+      predictor.names,
+      unpenalized.names
+    )
+  }
+
+  if (!is.null(object$path$null_theta)) {
+    object$path$null_theta <-
+      .egmifs.name.vector(
+        object$path$null_theta,
+        unpenalized.names
+      )
+  }
+
+  if (!is.null(object$path$states)) {
+    states <- object$path$states
+
+    if (!is.null(states$beta)) {
+      states$beta <- lapply(
+        states$beta,
+        .egmifs.name.vector,
+        labels = predictor.names
+      )
+    }
+
+    if (!is.null(states$theta)) {
+      states$theta <- lapply(
+        states$theta,
+        .egmifs.name.vector,
+        labels = unpenalized.names
+      )
+    }
+
+    if (!is.null(states$active_set)) {
+      states$active_set <- lapply(
+        states$active_set,
+        .egmifs.name.vector,
+        labels = predictor.names
+      )
+    }
+
+    object$path$states <- states
+  }
+
+  if (!is.null(object$states)) {
+    if (!is.null(object$states$beta)) {
+      object$states$beta <- lapply(
+        object$states$beta,
+        .egmifs.name.vector,
+        labels = predictor.names
+      )
+    }
+
+    if (!is.null(object$states$theta)) {
+      object$states$theta <- lapply(
+        object$states$theta,
+        .egmifs.name.vector,
+        labels = unpenalized.names
+      )
+    }
+
+    if (!is.null(object$states$active_set)) {
+      object$states$active_set <- lapply(
+        object$states$active_set,
+        .egmifs.name.vector,
+        labels = predictor.names
+      )
+    }
+  }
+
+  if (!is.null(object$path$best_criteria)) {
+    for (criterion_name in names(object$path$best_criteria)) {
+      object$path$best_criteria[[criterion_name]]$state <-
+        .egmifs.name.state(
+          object$path$best_criteria[[criterion_name]]$state,
+          predictor.names,
+          unpenalized.names
+        )
+    }
+  }
+
+  if (!is.null(object$path$last_saved_active_set)) {
+    object$path$last_saved_active_set <-
+      .egmifs.name.vector(
+        object$path$last_saved_active_set,
+        predictor.names
+      )
+  }
+
+  if (!is.null(object$stagewise)) {
+    for (
+        field in c(
+          "beta_start",
+          "beta_trial",
+          "delta_beta"
+        )
+    ) {
+      if (!is.null(object$stagewise[[field]])) {
+        object$stagewise[[field]] <-
+          .egmifs.name.vector(
+            object$stagewise[[field]],
+            predictor.names
+          )
+      }
+    }
+  }
+
+  object
+}
+
+
+.egmifs.beta.matrix <- function(object) {
+  states <- .egmifs.path.states(object)
+
+  beta <- do.call(
+    rbind,
+    lapply(
+      states$beta,
+      function(value) as.numeric(value)
+    )
+  )
+
+  if (is.null(dim(beta))) {
+    beta <- matrix(beta, nrow = 1L)
+  }
+
+  colnames(beta) <- .egmifs.predictor.names(
+    object,
+    ncol(beta)
+  )
+
+  if (!is.null(states$iteration)) {
+    rownames(beta) <- paste0(
+      "iter_",
+      as.integer(states$iteration)
+    )
+  }
+
+  beta
+}
+
+
+.egmifs.theta.matrix <- function(object) {
+  states <- .egmifs.path.states(object)
+
+  theta <- do.call(
+    rbind,
+    lapply(
+      states$theta,
+      function(value) as.numeric(value)
+    )
+  )
+
+  if (is.null(dim(theta))) {
+    theta <- matrix(theta, nrow = 1L)
+  }
+
+  colnames(theta) <- .egmifs.unpenalized.names(
+    object,
+    ncol(theta)
+  )
+
+  theta
+}
+
+
+.egmifs.criteria.path <- function(object) {
+  states <- .egmifs.path.states(object)
+
+  criteria <- states$criteria
+
+  if (is.null(criteria) || length(criteria) == 0L) {
+    return(
+      matrix(
+        numeric(),
+        nrow = length(states$iteration),
+        ncol = 0L
+      )
+    )
+  }
+
+  result <- do.call(
+    cbind,
+    lapply(criteria, as.numeric)
+  )
+
+  if (is.null(dim(result))) {
+    result <- matrix(result, ncol = 1L)
+  }
+
+  colnames(result) <- names(criteria)
+  rownames(result) <- paste0(
+    "iter_",
+    as.integer(states$iteration)
+  )
+
+  result
+}
+
+
+.egmifs.best.criteria <- function(object) {
+  best <- object$path$best_criteria
+
+  if (is.null(best)) {
+    best <- list()
+  }
+
+  best
+}
+
+
+.egmifs.match.criteria <- function(object, criteria = NULL) {
+  available <- names(.egmifs.best.criteria(object))
+
+  if (is.null(criteria)) {
+    return(available)
+  }
+
+  criteria <- as.character(criteria)
+  unknown <- setdiff(criteria, available)
+
+  if (length(unknown) > 0L) {
+    stop(
+      "Unknown criterion name(s): ",
+      paste(unknown, collapse = ", "),
+      ". Available criteria: ",
+      paste(available, collapse = ", "),
+      call. = FALSE
+    )
+  }
+
+  criteria
+}
+
+
+.egmifs.state.parameters <- function(state) {
+  parameters <- state$predictors$parameters
+
+  list(
+    beta = as.numeric(parameters$beta),
+    theta = as.numeric(parameters$theta),
+    family_parameters = as.numeric(parameters$family_parameters),
+    link_parameters = as.numeric(parameters$link_parameters)
+  )
+}
+
+
+.egmifs.resolve.state <- function(
+    object,
+    criterion = NULL,
+    iteration = NULL
+) {
+  if (!is.null(criterion) && !is.null(iteration)) {
+    stop(
+      "Supply either `criterion` or `iteration`, not both.",
+      call. = FALSE
+    )
+  }
+
+  if (!is.null(criterion)) {
+    criterion <- .egmifs.match.criteria(
+      object,
+      criterion
+    )
+
+    if (length(criterion) != 1L) {
+      stop(
+        "`criterion` must identify exactly one criterion.",
+        call. = FALSE
+      )
+    }
+
+    return(
+      list(
+        state = object$path$best_criteria[[criterion]]$state,
+        label = paste0("criterion ", criterion),
+        criterion = criterion
+      )
+    )
+  }
+
+  if (!is.null(iteration)) {
+    if (
+        !is.numeric(iteration) ||
+        length(iteration) != 1L ||
+        is.na(iteration) ||
+        !is.finite(iteration)
+    ) {
+      stop(
+        "`iteration` must be one finite numeric value.",
+        call. = FALSE
+      )
+    }
+
+    states <- .egmifs.path.states(object)
+    iteration_values <- as.numeric(states$iteration)
+    index <- which.min(abs(iteration_values - iteration))
+
+    state <- list(
+      predictors = list(
+        parameters = list(
+          beta = states$beta[[index]],
+          theta = states$theta[[index]],
+          family_parameters = states$family_parameters[[index]],
+          link_parameters = states$link_parameters[[index]]
+        ),
+        xbeta = states$xbeta[[index]],
+        wtheta = states$wtheta[[index]],
+        eta = states$eta[[index]],
+        mu = states$mu[[index]],
+        active_set = states$active_set[[index]]
+      ),
+      negloglik = states$negloglik[[index]],
+      criteria = vapply(
+        states$criteria,
+        function(value) value[[index]],
+        numeric(1L)
+      ),
+      iteration = states$iteration[[index]],
+      pseudo_r2 = states$pseudo_r2[[index]],
+      elapsed_time = states$elapsed_time[[index]]
+    )
+
+    return(
+      list(
+        state = state,
+        label = paste0(
+          "saved iteration ",
+          as.integer(states$iteration[[index]])
+        ),
+        criterion = NULL
+      )
+    )
+  }
+
+  list(
+    state = .egmifs.terminal.state(object),
+    label = "terminal state",
+    criterion = NULL
+  )
+}
+
+
+.egmifs.criterion.table <- function(object) {
+  best <- .egmifs.best.criteria(object)
+
+  if (length(best) == 0L) {
+    return(
+      data.frame(
+        criterion = character(),
+        value = numeric(),
+        iteration = integer(),
+        nonzero = integer(),
+        negloglik = numeric(),
+        pseudo_r2 = numeric(),
+        stringsAsFactors = FALSE
+      )
+    )
+  }
+
+  do.call(
+    rbind,
+    lapply(
+      names(best),
+      function(name) {
+        selected <- best[[name]]
+        beta <- selected$state$predictors$parameters$beta
+
+        data.frame(
+          criterion = name,
+          value = as.numeric(selected$value),
+          iteration = as.integer(selected$state$iteration),
+          nonzero = sum(beta != 0),
+          negloglik = as.numeric(selected$state$negloglik),
+          pseudo_r2 = as.numeric(selected$state$pseudo_r2),
+          stringsAsFactors = FALSE
+        )
+      }
+    )
+  )
+}
+
+
+.egmifs.summary.model <- function(
+    object,
+    state,
+    zero.tol,
+    criterion = NULL,
+    criterion.value = NA_real_
+) {
+  parameters <- .egmifs.state.parameters(state)
+
+  predictor_names <- .egmifs.predictor.names(
+    object,
+    length(parameters$beta)
+  )
+
+  names(parameters$beta) <- predictor_names
+  names(parameters$theta) <- .egmifs.unpenalized.names(
+    object,
+    length(parameters$theta)
+  )
+
+  nonzero <- abs(parameters$beta) > zero.tol
+
+  coefficient_table <- data.frame(
+    term = predictor_names[nonzero],
+    estimate = parameters$beta[nonzero],
+    absolute_estimate = abs(parameters$beta[nonzero]),
+    stringsAsFactors = FALSE
+  )
+
+  if (nrow(coefficient_table) > 0L) {
+    coefficient_table <- coefficient_table[
+      order(
+        coefficient_table$absolute_estimate,
+        decreasing = TRUE
+      ),
+      ,
+      drop = FALSE
+    ]
+  }
+
+  selected_criteria <- if (
+      is.null(state$criteria) ||
+      length(state$criteria) == 0L
+  ) {
+    data.frame(
+      criterion = character(),
+      value = numeric(),
+      stringsAsFactors = FALSE
+    )
+  } else {
+    data.frame(
+      criterion = names(state$criteria),
+      value = as.numeric(state$criteria),
+      stringsAsFactors = FALSE
+    )
+  }
+
+  list(
+    family = .egmifs.family.label(object),
+    link = .egmifs.link.label(object),
+    criterion = criterion,
+    criterion_value = as.numeric(criterion.value),
+    iteration = as.integer(state$iteration),
+    negloglik = as.numeric(state$negloglik),
+    loglik = -as.numeric(state$negloglik),
+    pseudo_r2 = as.numeric(state$pseudo_r2),
+    nonzero = sum(nonzero),
+    theta = parameters$theta,
+    family_parameters = parameters$family_parameters,
+    link_parameters = parameters$link_parameters,
+    coefficients = coefficient_table,
+    selected_criteria = selected_criteria
+  )
+}
+
+
+.egmifs.print.indented.table <- function(
+    value,
+    digits,
+    indent = 4L,
+    row.names = FALSE
+) {
+  lines <- utils::capture.output(
+    print(
+      value,
+      row.names = row.names,
+      digits = digits
+    )
+  )
+
+  cat(
+    paste0(
+      strrep(" ", indent),
+      lines
+    ),
+    sep = "\n"
+  )
+  cat("\n")
+
+  invisible(value)
+}
+
+
+.egmifs.parameter.table <- function(
+    value,
+    prefix,
+    first.name = NULL
+) {
+  parameter_names <- names(value)
+  value <- as.numeric(value)
+
+  if (length(value) == 0L) {
+    return(
+      data.frame(
+        parameter = character(),
+        estimate = numeric(),
+        stringsAsFactors = FALSE
+      )
+    )
+  }
+
+  if (
+      is.null(parameter_names) ||
+      length(parameter_names) != length(value) ||
+      anyNA(parameter_names) ||
+      any(!nzchar(parameter_names))
+  ) {
+    parameter_names <- paste0(
+      prefix,
+      seq_along(value)
+    )
+
+    if (!is.null(first.name) && length(value) >= 1L) {
+      parameter_names[[1L]] <- first.name
+    }
+  }
+
+  data.frame(
+    parameter = parameter_names,
+    estimate = value,
+    stringsAsFactors = FALSE
+  )
+}
+
+
+.egmifs.print.summary.model <- function(
+    model,
+    heading,
+    digits,
+    max.coef,
+    show.criterion.value = FALSE,
+    criterion.values.heading = "Criterion values:"
+) {
+  separator <- strrep("-", 72L)
+
+  cat("\n", separator, "\n", sep = "")
+  cat(heading, "\n", sep = "")
+  cat(separator, "\n", sep = "")
+
+  cat("  State:\n")
+
+  if (
+      isTRUE(show.criterion.value) &&
+      is.finite(model$criterion_value)
+  ) {
+    cat(
+      "    Criterion value:         ",
+      format(model$criterion_value, digits = digits),
+      "\n",
+      sep = ""
+    )
+  }
+
+  cat("    Iteration:               ", model$iteration, "\n", sep = "")
+  cat(
+    "    Negative log-likelihood: ",
+    format(model$negloglik, digits = digits),
+    "\n",
+    sep = ""
+  )
+  cat(
+    "    Log-likelihood:          ",
+    format(model$loglik, digits = digits),
+    "\n",
+    sep = ""
+  )
+  cat(
+    "    Pseudo-R2:               ",
+    format(model$pseudo_r2, digits = digits),
+    "\n",
+    sep = ""
+  )
+  cat("    Nonzero beta:            ", model$nonzero, "\n", sep = "")
+
+  if (nrow(model$selected_criteria) > 0L) {
+    cat("\n  ", criterion.values.heading, "\n", sep = "")
+    .egmifs.print.indented.table(
+      model$selected_criteria,
+      digits = digits,
+      indent = 4L
+    )
+  }
+
+  if (length(model$theta) > 0L) {
+    theta_names <- names(model$theta)
+
+    if (
+        is.null(theta_names) ||
+        length(theta_names) != length(model$theta) ||
+        anyNA(theta_names) ||
+        any(!nzchar(theta_names))
+    ) {
+      theta_names <- paste0("theta", seq_along(model$theta))
+    }
+
+    theta_table <- data.frame(
+      term = theta_names,
+      estimate = as.numeric(model$theta),
+      stringsAsFactors = FALSE
+    )
+
+    cat("\n  Unpenalized coefficients:\n")
+    .egmifs.print.indented.table(
+      theta_table,
+      digits = digits,
+      indent = 4L
+    )
+  }
+
+  if (length(model$family_parameters) > 0L) {
+    family_table <- .egmifs.parameter.table(
+      model$family_parameters,
+      prefix = "family_parameter_",
+      first.name = if (
+          !is.null(model$family) &&
+          grepl(
+            "NB2|negative",
+            model$family,
+            ignore.case = TRUE
+          )
+      ) {
+        "dispersion"
+      } else {
+        NULL
+      }
+    )
+
+    cat("\n  Family parameters:\n")
+    .egmifs.print.indented.table(
+      family_table,
+      digits = digits,
+      indent = 4L
+    )
+  }
+
+  if (length(model$link_parameters) > 0L) {
+    link_table <- .egmifs.parameter.table(
+      model$link_parameters,
+      prefix = "link_parameter_"
+    )
+
+    cat("\n  Link parameters:\n")
+    .egmifs.print.indented.table(
+      link_table,
+      digits = digits,
+      indent = 4L
+    )
+  }
+
+  cat("\n  Penalized coefficients:\n")
+
+  if (nrow(model$coefficients) == 0L) {
+    cat("    No nonzero penalized coefficients.\n")
+  } else {
+    shown <- utils::head(
+      model$coefficients[, c("term", "estimate"), drop = FALSE],
+      max.coef
+    )
+
+    .egmifs.print.indented.table(
+      shown,
+      digits = digits,
+      indent = 4L
+    )
+
+    if (nrow(model$coefficients) > nrow(shown)) {
+      cat(
+        "    ... ",
+        nrow(model$coefficients) - nrow(shown),
+        " additional nonzero coefficients not shown\n",
+        sep = ""
+      )
+    }
+  }
+
+  invisible(model)
+}
+
+
+#' Extract an egmifs coefficient path or selected coefficients
+#'
+#' With no selector, this returns the saved coefficient path. Use
+#' `state = "terminal"`, one or more criterion names, or one or more iterations
+#' to extract fitted coefficient vectors from particular states.
+#'
+#' @param object An `egmifs` fit.
+#' @param criterion Optional criterion name or names selecting their best stored
+#'   states.
+#' @param iteration Optional numeric iteration or iterations. The nearest saved
+#'   state is used for each value.
+#' @param include.theta Logical. Include unpenalized coefficients in paths and
+#'   selected vectors.
+#' @param state Optional explicit state selector: `"path"` or `"terminal"`.
+#'   It cannot be combined with `criterion` or `iteration`.
+#' @param drop Logical. Return a named vector instead of a one-row matrix when
+#'   exactly one state is selected.
+#' @param ... Unused.
+#'
+#' @return A numeric matrix for a path or multiple selected states. A single
+#'   selected state is returned as a named numeric vector when `drop = TRUE`.
+#' @export
+coef.egmifs <- function(
+    object,
+    criterion = NULL,
+    iteration = NULL,
+    include.theta = FALSE,
+    state = NULL,
+    drop = TRUE,
+    ...
+) {
+  if (!is.null(state)) {
+    if (
+        !is.character(state) ||
+        length(state) != 1L ||
+        is.na(state)
+    ) {
+      stop(
+        "`state` must be NULL, \"path\", or \"terminal\".",
+        call. = FALSE
+      )
+    }
+
+    state <- match.arg(state, c("path", "terminal"))
+
+    if (!is.null(criterion) || !is.null(iteration)) {
+      stop(
+        "`state` cannot be combined with `criterion` or `iteration`.",
+        call. = FALSE
+      )
+    }
+  }
+
+  if (!is.null(criterion) && !is.null(iteration)) {
+    stop(
+      "Supply either `criterion` or `iteration`, not both.",
+      call. = FALSE
+    )
+  }
+
+  path.requested <-
+    identical(state, "path") ||
+    (
+      is.null(state) &&
+      is.null(criterion) &&
+      is.null(iteration)
+    )
+
+  if (path.requested) {
+    beta <- .egmifs.beta.matrix(object)
+
+    if (!isTRUE(include.theta)) {
+      return(beta)
+    }
+
+    theta <- .egmifs.theta.matrix(object)
+    if (nrow(theta) != nrow(beta)) {
+      stop(
+        "Stored penalized and unpenalized coefficient paths have different lengths.",
+        call. = FALSE
+      )
+    }
+    rownames(theta) <- rownames(beta)
+
+    return(cbind(theta, beta))
+  }
+
+  coefficient.vector <- function(selected.state) {
+    parameters <- .egmifs.state.parameters(selected.state)
+
+    names(parameters$beta) <- .egmifs.predictor.names(
+      object,
+      length(parameters$beta)
+    )
+
+    if (!isTRUE(include.theta)) {
+      return(parameters$beta)
+    }
+
+    names(parameters$theta) <- .egmifs.unpenalized.names(
+      object,
+      length(parameters$theta)
+    )
+
+    c(parameters$theta, parameters$beta)
+  }
+
+  if (identical(state, "terminal")) {
+    selected <- list(
+      .egmifs.resolve.state(object)
+    )
+    labels <- "terminal"
+  } else if (!is.null(criterion)) {
+    criterion <- .egmifs.match.criteria(object, criterion)
+    if (length(criterion) == 0L) {
+      stop(
+        "No criterion names were supplied.",
+        call. = FALSE
+      )
+    }
+
+    selected <- lapply(
+      criterion,
+      function(criterion.name) {
+        .egmifs.resolve.state(
+          object,
+          criterion = criterion.name
+        )
+      }
+    )
+    labels <- criterion
+  } else {
+    if (
+        !is.numeric(iteration) ||
+        length(iteration) == 0L ||
+        anyNA(iteration) ||
+        any(!is.finite(iteration))
+    ) {
+      stop(
+        "`iteration` must contain one or more finite numeric values.",
+        call. = FALSE
+      )
+    }
+
+    selected <- lapply(
+      as.numeric(iteration),
+      function(iteration.value) {
+        .egmifs.resolve.state(
+          object,
+          iteration = iteration.value
+        )
+      }
+    )
+    labels <- vapply(
+      selected,
+      function(value) {
+        paste0("iter_", as.integer(value$state$iteration))
+      },
+      character(1L)
+    )
+    labels <- make.unique(labels)
+  }
+
+  out <- lapply(
+    selected,
+    function(value) coefficient.vector(value$state)
+  )
+
+  if (length(out) == 1L && isTRUE(drop)) {
+    return(out[[1L]])
+  }
+
+  out <- do.call(rbind, out)
+  rownames(out) <- labels
+  out
+}
+
+
+#' Print an egmifs fit
+#'
+#' @param x An `egmifs` fit.
+#' @param digits Number of significant digits.
+#' @param max.criteria Maximum number of criterion selections to print.
+#' @param ... Unused.
+#'
+#' @export
+print.egmifs <- function(
+    x,
+    digits = max(3L, getOption("digits") - 3L),
+    max.criteria = 20L,
+    ...
+) {
+  terminal <- .egmifs.terminal.state(x)
+  parameters <- .egmifs.state.parameters(terminal)
+  criterion_table <- .egmifs.criterion.table(x)
+
+  cat("egmifs path fit\n")
+
+  if (!is.null(x$call)) {
+    cat("\nCall:\n")
+    print(x$call)
+  }
+
+  cat("\n")
+  cat("Family:            ", .egmifs.family.label(x), "\n", sep = "")
+  cat("Link:              ", .egmifs.link.label(x), "\n", sep = "")
+  cat("Family/link mode:   ", .egmifs.interface.label(x), "\n", sep = "")
+  cat("Observations:      ", x$input$n, "\n", sep = "")
+  cat("Penalized terms:   ", x$input$p, "\n", sep = "")
+  cat("Unpenalized terms: ", x$input$q, "\n", sep = "")
+  cat("Elastic-net alpha: ", format(x$input$enet_alpha, digits = digits), "\n", sep = "")
+  prior_status <- if (!is.null(x$input$prior_eta)) {
+    if (isTRUE(x$input$has_prior)) "yes" else "specified (currently equal)"
+  } else if (isTRUE(x$input$has_prior)) {
+    "yes"
+  } else {
+    "no"
+  }
+  cat("Prior weights:     ", prior_status, "\n", sep = "")
+
+  if (!is.null(x$input$prior_eta)) {
+    cat(
+      "Prior strength eta: ",
+      format(x$input$prior_eta, digits = digits),
+      "\n",
+      sep = ""
+    )
+  }
+
+  if (
+      !is.null(x$path$null_negloglik) ||
+      !is.null(x$path$saturated_negloglik)
+  ) {
+    cat("\nReference models:\n")
+
+    if (!is.null(x$path$null_negloglik)) {
+      cat(
+        "  Null negative log-likelihood:      ",
+        format(x$path$null_negloglik, digits = digits),
+        "\n",
+        sep = ""
+      )
+    }
+
+    if (!is.null(x$path$saturated_negloglik)) {
+      cat(
+        "  Saturated negative log-likelihood: ",
+        format(x$path$saturated_negloglik, digits = digits),
+        "\n",
+        sep = ""
+      )
+    }
+  }
+
+  cat("\n")
+  cat("Terminal iteration: ", terminal$iteration, "\n", sep = "")
+  cat("Nonzero beta:       ", sum(abs(parameters$beta) > 0), "\n", sep = "")
+  cat("Negative log-likelihood: ", format(terminal$negloglik, digits = digits), "\n", sep = "")
+  cat("Pseudo-R2:           ", format(terminal$pseudo_r2, digits = digits), "\n", sep = "")
+
+  if (!is.null(terminal$criteria) && length(terminal$criteria) > 0L) {
+    cat("\nTerminal criterion values:\n")
+    print(terminal$criteria, digits = digits)
+  }
+
+  if (!is.null(x$path$total_time)) {
+    cat("Total time (sec):    ", format(x$path$total_time, digits = digits), "\n", sep = "")
+  }
+
+  if (!is.null(x$path$message)) {
+    cat("Termination:         ", x$path$message, "\n", sep = "")
+  }
+
+  if (nrow(criterion_table) > 0L) {
+    cat("\nCriterion-selected states:\n")
+
+    shown <- utils::head(
+      criterion_table,
+      max.criteria
+    )
+
+    print(
+      shown,
+      row.names = FALSE,
+      digits = digits
+    )
+
+    if (nrow(criterion_table) > nrow(shown)) {
+      cat(
+        "... ",
+        nrow(criterion_table) - nrow(shown),
+        " additional criteria not shown\n",
+        sep = ""
+      )
+    }
+  }
+
+  invisible(x)
+}
+
+
+#' Summarize an egmifs fit
+#'
+#' @param object An `egmifs` fit.
+#' @param criterion Optional criterion selecting the state summarized.
+#' @param iteration Optional iteration selecting the nearest saved state.
+#' @param ground.truth Optional logical or binary vector used to calculate
+#'   selection metrics.
+#' @param zero.tol Coefficients with absolute value no larger than this are
+#'   treated as zero.
+#' @param max.coef Maximum number of nonzero coefficients printed later.
+#' @param prior.selected Optional logical prior-selected vector. See
+#'   [egmifs.metrics()].
+#' @param prior.cutoff Cutoff used with `weight_vec` when `prior.selected` is
+#'   omitted.
+#' @param prior.direction Whether smaller or larger weights indicate prior
+#'   selection.
+#' @param ... Additional arguments passed to [egmifs.metrics()].
+#'
+#' @return An object of class `summary.egmifs`.
+#' @export
+summary.egmifs <- function(
+    object,
+    criterion = NULL,
+    iteration = NULL,
+    ground.truth = NULL,
+    zero.tol = sqrt(.Machine$double.eps),
+    max.coef = 20L,
+    prior.selected = NULL,
+    prior.cutoff = 1,
+    prior.direction = c("lower", "higher"),
+    ...
+) {
+  selected <- .egmifs.resolve.state(
+    object,
+    criterion = criterion,
+    iteration = iteration
+  )
+
+  state <- selected$state
+
+  selected_model <- .egmifs.summary.model(
+    object = object,
+    state = state,
+    zero.tol = zero.tol,
+    criterion = selected$criterion,
+    criterion.value = if (is.null(selected$criterion)) {
+      NA_real_
+    } else {
+      as.numeric(
+        object$path$best_criteria[[selected$criterion]]$value
+      )
+    }
+  )
+
+  best_criteria <- .egmifs.best.criteria(object)
+
+  criterion_models <- lapply(
+    names(best_criteria),
+    function(criterion_name) {
+      selected_criterion <- best_criteria[[criterion_name]]
+
+      .egmifs.summary.model(
+        object = object,
+        state = selected_criterion$state,
+        zero.tol = zero.tol,
+        criterion = criterion_name,
+        criterion.value = selected_criterion$value
+      )
+    }
+  )
+
+  names(criterion_models) <- names(best_criteria)
+
+  metric_summary <- NULL
+
+  if (!is.null(ground.truth)) {
+    prior.direction <- match.arg(prior.direction)
+
+    metric_object <- egmifs.metrics(
+      object = object,
+      ground.truth = ground.truth,
+      zero.tol = zero.tol,
+      prior.selected = prior.selected,
+      prior.cutoff = prior.cutoff,
+      prior.direction = prior.direction,
+      ...
+    )
+
+    metric_summary <- list(
+      selected = .egmifs.metric.for.state(
+        object = object,
+        state = state,
+        ground.truth = metric_object$ground_truth,
+        zero.tol = zero.tol,
+        zero.division = metric_object$settings$zero_division
+      ),
+      criteria = metric_object$criteria,
+      prior = metric_object$prior
+    )
+  }
+
+  out <- list(
+    call = object$call,
+    family = .egmifs.family.label(object),
+    link = .egmifs.link.label(object),
+    plugin_structure = .egmifs.interface.label(object),
+    n = object$input$n,
+    p = object$input$p,
+    q = object$input$q,
+    enet_alpha = object$input$enet_alpha,
+    has_prior = isTRUE(object$input$has_prior),
+    prior_eta = if (is.null(object$input$prior_eta)) {
+      NA_real_
+    } else {
+      as.numeric(object$input$prior_eta)
+    },
+    null_negloglik = if (is.null(object$path$null_negloglik)) {
+      NA_real_
+    } else {
+      as.numeric(object$path$null_negloglik)
+    },
+    saturated_negloglik = if (
+        is.null(object$path$saturated_negloglik)
+    ) {
+      NA_real_
+    } else {
+      as.numeric(object$path$saturated_negloglik)
+    },
+    selected_label = selected$label,
+    selected_criterion = selected$criterion,
+    selected_model = selected_model,
+    iteration = selected_model$iteration,
+    negloglik = selected_model$negloglik,
+    loglik = selected_model$loglik,
+    pseudo_r2 = selected_model$pseudo_r2,
+    nonzero = selected_model$nonzero,
+    theta = selected_model$theta,
+    family_parameters = selected_model$family_parameters,
+    link_parameters = selected_model$link_parameters,
+    coefficients = selected_model$coefficients,
+    max_coef = as.integer(max.coef),
+    selected_criteria = selected_model$selected_criteria,
+    criterion_models = criterion_models,
+    criteria = .egmifs.criterion.table(object),
+    metrics = metric_summary,
+    timing = c(
+      null = object$path$null_time,
+      saturated = object$path$saturated_time,
+      total = object$path$total_time
+    ),
+    termination = object$path$message
+  )
+
+  class(out) <- "summary.egmifs"
+  out
+}
+
+
+#' @export
+print.summary.egmifs <- function(
+    x,
+    digits = max(3L, getOption("digits") - 3L),
+    ...
+) {
+  if (!is.null(x$call)) {
+    cat("\nCall:\n")
+    print(x$call)
+  }
+
+  cat("\nModel:\n")
+  cat("  Family:            ", x$family, "\n", sep = "")
+  cat("  Link:              ", x$link, "\n", sep = "")
+  cat("  Family/link mode:   ", x$plugin_structure, "\n", sep = "")
+  cat("  Observations:      ", x$n, "\n", sep = "")
+  cat("  Penalized terms:   ", x$p, "\n", sep = "")
+  cat("  Unpenalized terms: ", x$q, "\n", sep = "")
+  cat("  Elastic-net alpha: ", format(x$enet_alpha, digits = digits), "\n", sep = "")
+  prior_status <- if (is.finite(x$prior_eta)) {
+    if (x$has_prior) "yes" else "specified (currently equal)"
+  } else if (x$has_prior) {
+    "yes"
+  } else {
+    "no"
+  }
+  cat("  Prior weights:     ", prior_status, "\n", sep = "")
+
+  if (is.finite(x$prior_eta)) {
+    cat(
+      "  Prior strength eta: ",
+      format(x$prior_eta, digits = digits),
+      "\n",
+      sep = ""
+    )
+  }
+
+  if (
+      is.finite(x$null_negloglik) ||
+      is.finite(x$saturated_negloglik)
+  ) {
+    cat("\nReference models:\n")
+
+    if (is.finite(x$null_negloglik)) {
+      cat(
+        "  Null negative log-likelihood:      ",
+        format(x$null_negloglik, digits = digits),
+        "\n",
+        sep = ""
+      )
+    }
+
+    if (is.finite(x$saturated_negloglik)) {
+      cat(
+        "  Saturated negative log-likelihood: ",
+        format(x$saturated_negloglik, digits = digits),
+        "\n",
+        sep = ""
+      )
+    }
+  }
+
+  if (
+      !is.null(x$criterion_models) &&
+      length(x$criterion_models) > 0L
+  ) {
+    cat("\nCriterion-selected models:\n")
+
+    for (criterion_name in names(x$criterion_models)) {
+      criterion_model <- x$criterion_models[[criterion_name]]
+
+      .egmifs.print.summary.model(
+        model = criterion_model,
+        heading = paste0(
+          criterion_name,
+          "-selected model"
+        ),
+        digits = digits,
+        max.coef = x$max_coef,
+        show.criterion.value = TRUE
+      )
+    }
+  }
+
+  selected_model <- x$selected_model
+
+  if (is.null(selected_model)) {
+    # Compatibility with summary objects created by an earlier package build.
+    selected_model <- list(
+      criterion = x$selected_criterion,
+      criterion_value = NA_real_,
+      iteration = x$iteration,
+      negloglik = x$negloglik,
+      loglik = x$loglik,
+      pseudo_r2 = x$pseudo_r2,
+      nonzero = x$nonzero,
+      theta = x$theta,
+      family_parameters = x$family_parameters,
+      link_parameters = x$link_parameters,
+      coefficients = x$coefficients,
+      selected_criteria = x$selected_criteria
+    )
+  }
+
+  selected_is_terminal <- identical(
+    x$selected_label,
+    "terminal state"
+  )
+
+  .egmifs.print.summary.model(
+    model = selected_model,
+    heading = if (selected_is_terminal) {
+      "Terminal (last path) state"
+    } else {
+      paste0(
+        "Selected state - ",
+        x$selected_label
+      )
+    },
+    digits = digits,
+    max.coef = x$max_coef,
+    show.criterion.value = FALSE,
+    criterion.values.heading = "Criterion values:"
+  )
+
+  if (!is.null(x$metrics)) {
+    cat("\nSelection metrics for summarized state:\n")
+    print(
+      x$metrics$selected,
+      row.names = FALSE,
+      digits = digits
+    )
+
+    if (!is.null(x$metrics$criteria) && nrow(x$metrics$criteria) > 0L) {
+      cat("\nGround-truth metrics at criterion-selected states:\n")
+      print(
+        x$metrics$criteria[, c(
+          "criterion",
+          "iteration",
+          "selected",
+          "precision",
+          "recall",
+          "F1"
+        ), drop = FALSE],
+        row.names = FALSE,
+        digits = digits
+      )
+    }
+
+    if (!is.null(x$metrics$prior)) {
+      cat("\nPrior-weight baseline:\n")
+      print(
+        x$metrics$prior,
+        row.names = FALSE,
+        digits = digits
+      )
+    }
+  }
+
+  if (length(x$timing) > 0L && any(is.finite(x$timing))) {
+    cat("\nTiming (seconds):\n")
+    print(x$timing, digits = digits)
+  }
+
+  if (!is.null(x$termination)) {
+    cat("\nTermination:\n  ", x$termination, "\n", sep = "")
+  }
+
+  invisible(x)
+}
+
+
+#' Plot an egmifs fit
+#'
+#' @param x An `egmifs` fit.
+#' @param type Plot type: coefficient paths, criterion paths, ground-truth
+#'   metrics, or fitted-model diagnostics.
+#' @param ground.truth Ground-truth selection vector. When supplied and `type`
+#'   is omitted, the metric-path plot is selected automatically.
+#' @param criterion,iteration Optional state selector used by diagnostic plots.
+#' @param zero.tol,zero.division,prior.selected,prior.weight.vec,prior.cutoff,prior.direction
+#'   Arguments used to construct an [egmifs.metrics()] object.
+#' @param ... Arguments passed to the corresponding plotting helper.
+#'
+#' @return The input fit invisibly, except for a metric-path plot, which plots
+#'   and returns the generated `egmifs.metrics` object invisibly. Therefore
+#'   `metrics <- plot(fit, ground.truth = truth)` both plots and captures it.
+#' @export
+plot.egmifs <- function(
+    x,
+    type = c("coefficients", "criteria", "metrics", "diagnostics", "overdispersion"),
+    ground.truth = NULL,
+    criterion = NULL,
+    iteration = NULL,
+    zero.tol = sqrt(.Machine$double.eps),
+    zero.division = c("zero", "one", "NA"),
+    prior.selected = NULL,
+    prior.weight.vec = NULL,
+    prior.cutoff = 1,
+    prior.direction = c("lower", "higher"),
+    ...
+) {
+  if (missing(type) && !is.null(ground.truth)) {
+    type <- "metrics"
+  } else {
+    type <- match.arg(type)
+  }
+
+  switch(
+    type,
+    coefficients = {
+      .egmifs.plot.coefficients(
+        x,
+        zero.tol = zero.tol,
+        ...
+      )
+      invisible(x)
+    },
+    criteria = {
+      .egmifs.plot.criteria(x, ...)
+      invisible(x)
+    },
+    metrics = {
+      if (is.null(ground.truth)) {
+        stop(
+          "`ground.truth` is required for `type = \"metrics\"`.",
+          call. = FALSE
+        )
+      }
+
+      metric_object <- egmifs.metrics(
+        object = x,
+        ground.truth = ground.truth,
+        zero.tol = zero.tol,
+        zero.division = match.arg(zero.division),
+        prior.selected = prior.selected,
+        prior.weight.vec = prior.weight.vec,
+        prior.cutoff = prior.cutoff,
+        prior.direction = match.arg(prior.direction)
+      )
+
+      plot(metric_object, ...)
+      invisible(metric_object)
+    },
+    diagnostics = {
+      diagnostic_object <- egmifs.diagnostics(
+        object = x,
+        criterion = criterion,
+        iteration = iteration
+      )
+
+      plot(diagnostic_object, ...)
+      invisible(diagnostic_object)
+    },
+    overdispersion = {
+      diagnostic_object <- egmifs.diagnostics(
+        object = x,
+        criterion = criterion,
+        iteration = iteration
+      )
+
+      plot(
+        diagnostic_object,
+        which = "overdispersion",
+        ...
+      )
+      invisible(diagnostic_object)
+    }
+  )
+}
