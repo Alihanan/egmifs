@@ -118,7 +118,14 @@
   }
 
   compile.environment <- new.env(parent = baseenv())
-  Rcpp::sourceCpp(code = code, env = compile.environment, rebuild = TRUE)
+
+  # Do not force a rebuild here. A live plugin is an owning XPtr whose concrete
+  # class is defined in the sourceCpp shared library. Forcing sourceCpp to
+  # rebuild identical source can unload the previous shared library while an
+  # earlier plugin object is still alive, leaving that object's vtable and
+  # destructor dangling. sourceCpp already caches compiled code by content, so
+  # changed source is rebuilt without `rebuild = TRUE`.
+  Rcpp::sourceCpp(code = code, env = compile.environment, rebuild = FALSE)
 
   if (!exists(factory, envir = compile.environment, mode = "function", inherits = FALSE)) {
     stop("Compiled source did not export factory `", factory, "`.", call. = FALSE)
