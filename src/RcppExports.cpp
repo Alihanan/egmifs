@@ -12,15 +12,15 @@ Rcpp::Rostream<false>& Rcpp::Rcerr = Rcpp::Rcpp_cerr_get();
 #endif
 
 // egmifs_cpp
-Rcpp::List egmifs_cpp(SEXP X, arma::vec y, SEXP w, arma::vec offset, const arma::vec& weight_vec, double enet_alpha, double epsilon_start, double epsilon_max, double epsilon_min, uint32_t null_iteration_max, uint32_t stagewise_iteration_max, double null_family_parameter_abs_tol, double stagewise_objective_rel_tol, double stagewise_beta_step_norm_tol, SEXP family, SEXP link_func, Rcpp::Nullable<Rcpp::List> criteria, double loglik_reltol_cutoff, double enet_abs_tol, double enet_rel_tol, uint32_t enet_max_iter, bool verbose, bool include_data, int state_track_strategy, uint64_t state_track_freq, const arma::vec& theta_initial, const arma::vec& theta_lower_bounds, const arma::vec& theta_upper_bounds, int null_nonpen_nlopt_algorithm, double null_nonpen_nlopt_xtol_rel, double null_nonpen_nlopt_ftol_rel, int null_nonpen_nlopt_maxeval, int null_family_nlopt_algorithm, double null_family_nlopt_xtol_rel, double null_family_nlopt_ftol_rel, int null_family_nlopt_maxeval, int null_link_nlopt_algorithm, double null_link_nlopt_xtol_rel, double null_link_nlopt_ftol_rel, int null_link_nlopt_maxeval, int saturated_family_nlopt_algorithm, double saturated_family_nlopt_xtol_rel, double saturated_family_nlopt_ftol_rel, int saturated_family_nlopt_maxeval, int stagewise_nonpen_nlopt_algorithm, double stagewise_nonpen_nlopt_xtol_rel, double stagewise_nonpen_nlopt_ftol_rel, int stagewise_nonpen_nlopt_maxeval, int stagewise_family_nlopt_algorithm, double stagewise_family_nlopt_xtol_rel, double stagewise_family_nlopt_ftol_rel, int stagewise_family_nlopt_maxeval, int stagewise_link_nlopt_algorithm, double stagewise_link_nlopt_xtol_rel, double stagewise_link_nlopt_ftol_rel, int stagewise_link_nlopt_maxeval, SEXP family_link);
-RcppExport SEXP _egmifs_egmifs_cpp(SEXP XSEXP, SEXP ySEXP, SEXP wSEXP, SEXP offsetSEXP, SEXP weight_vecSEXP, SEXP enet_alphaSEXP, SEXP epsilon_startSEXP, SEXP epsilon_maxSEXP, SEXP epsilon_minSEXP, SEXP null_iteration_maxSEXP, SEXP stagewise_iteration_maxSEXP, SEXP null_family_parameter_abs_tolSEXP, SEXP stagewise_objective_rel_tolSEXP, SEXP stagewise_beta_step_norm_tolSEXP, SEXP familySEXP, SEXP link_funcSEXP, SEXP criteriaSEXP, SEXP loglik_reltol_cutoffSEXP, SEXP enet_abs_tolSEXP, SEXP enet_rel_tolSEXP, SEXP enet_max_iterSEXP, SEXP verboseSEXP, SEXP include_dataSEXP, SEXP state_track_strategySEXP, SEXP state_track_freqSEXP, SEXP theta_initialSEXP, SEXP theta_lower_boundsSEXP, SEXP theta_upper_boundsSEXP, SEXP null_nonpen_nlopt_algorithmSEXP, SEXP null_nonpen_nlopt_xtol_relSEXP, SEXP null_nonpen_nlopt_ftol_relSEXP, SEXP null_nonpen_nlopt_maxevalSEXP, SEXP null_family_nlopt_algorithmSEXP, SEXP null_family_nlopt_xtol_relSEXP, SEXP null_family_nlopt_ftol_relSEXP, SEXP null_family_nlopt_maxevalSEXP, SEXP null_link_nlopt_algorithmSEXP, SEXP null_link_nlopt_xtol_relSEXP, SEXP null_link_nlopt_ftol_relSEXP, SEXP null_link_nlopt_maxevalSEXP, SEXP saturated_family_nlopt_algorithmSEXP, SEXP saturated_family_nlopt_xtol_relSEXP, SEXP saturated_family_nlopt_ftol_relSEXP, SEXP saturated_family_nlopt_maxevalSEXP, SEXP stagewise_nonpen_nlopt_algorithmSEXP, SEXP stagewise_nonpen_nlopt_xtol_relSEXP, SEXP stagewise_nonpen_nlopt_ftol_relSEXP, SEXP stagewise_nonpen_nlopt_maxevalSEXP, SEXP stagewise_family_nlopt_algorithmSEXP, SEXP stagewise_family_nlopt_xtol_relSEXP, SEXP stagewise_family_nlopt_ftol_relSEXP, SEXP stagewise_family_nlopt_maxevalSEXP, SEXP stagewise_link_nlopt_algorithmSEXP, SEXP stagewise_link_nlopt_xtol_relSEXP, SEXP stagewise_link_nlopt_ftol_relSEXP, SEXP stagewise_link_nlopt_maxevalSEXP, SEXP family_linkSEXP) {
+Rcpp::List egmifs_cpp(const arma::mat& X, const arma::vec& y, const arma::mat& w, const arma::vec& offset, const arma::vec& weight_vec, double enet_alpha, double epsilon_start, double epsilon_max, double epsilon_min, uint32_t null_iteration_max, uint32_t stagewise_iteration_max, double null_family_parameter_abs_tol, double stagewise_objective_rel_tol, double stagewise_beta_step_norm_tol, SEXP family, SEXP link_func, Rcpp::Nullable<Rcpp::List> criteria, double loglik_reltol_cutoff, double enet_abs_tol, double enet_rel_tol, uint32_t enet_max_iter, bool verbose, int state_track_strategy, uint64_t state_track_freq, bool include_data, const arma::vec& theta_initial, const arma::vec& theta_lower_bounds, const arma::vec& theta_upper_bounds, int nonpen_nlopt_algorithm, double nonpen_nlopt_xtol_rel, double nonpen_nlopt_ftol_rel, int nonpen_nlopt_maxeval, int family_nlopt_algorithm, double family_nlopt_xtol_rel, double family_nlopt_ftol_rel, int family_nlopt_maxeval, int link_nlopt_algorithm, double link_nlopt_xtol_rel, double link_nlopt_ftol_rel, int link_nlopt_maxeval, SEXP family_link);
+RcppExport SEXP _egmifs_egmifs_cpp(SEXP XSEXP, SEXP ySEXP, SEXP wSEXP, SEXP offsetSEXP, SEXP weight_vecSEXP, SEXP enet_alphaSEXP, SEXP epsilon_startSEXP, SEXP epsilon_maxSEXP, SEXP epsilon_minSEXP, SEXP null_iteration_maxSEXP, SEXP stagewise_iteration_maxSEXP, SEXP null_family_parameter_abs_tolSEXP, SEXP stagewise_objective_rel_tolSEXP, SEXP stagewise_beta_step_norm_tolSEXP, SEXP familySEXP, SEXP link_funcSEXP, SEXP criteriaSEXP, SEXP loglik_reltol_cutoffSEXP, SEXP enet_abs_tolSEXP, SEXP enet_rel_tolSEXP, SEXP enet_max_iterSEXP, SEXP verboseSEXP, SEXP state_track_strategySEXP, SEXP state_track_freqSEXP, SEXP include_dataSEXP, SEXP theta_initialSEXP, SEXP theta_lower_boundsSEXP, SEXP theta_upper_boundsSEXP, SEXP nonpen_nlopt_algorithmSEXP, SEXP nonpen_nlopt_xtol_relSEXP, SEXP nonpen_nlopt_ftol_relSEXP, SEXP nonpen_nlopt_maxevalSEXP, SEXP family_nlopt_algorithmSEXP, SEXP family_nlopt_xtol_relSEXP, SEXP family_nlopt_ftol_relSEXP, SEXP family_nlopt_maxevalSEXP, SEXP link_nlopt_algorithmSEXP, SEXP link_nlopt_xtol_relSEXP, SEXP link_nlopt_ftol_relSEXP, SEXP link_nlopt_maxevalSEXP, SEXP family_linkSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< SEXP >::type X(XSEXP);
-    Rcpp::traits::input_parameter< arma::vec >::type y(ySEXP);
-    Rcpp::traits::input_parameter< SEXP >::type w(wSEXP);
-    Rcpp::traits::input_parameter< arma::vec >::type offset(offsetSEXP);
+    Rcpp::traits::input_parameter< const arma::mat& >::type X(XSEXP);
+    Rcpp::traits::input_parameter< const arma::vec& >::type y(ySEXP);
+    Rcpp::traits::input_parameter< const arma::mat& >::type w(wSEXP);
+    Rcpp::traits::input_parameter< const arma::vec& >::type offset(offsetSEXP);
     Rcpp::traits::input_parameter< const arma::vec& >::type weight_vec(weight_vecSEXP);
     Rcpp::traits::input_parameter< double >::type enet_alpha(enet_alphaSEXP);
     Rcpp::traits::input_parameter< double >::type epsilon_start(epsilon_startSEXP);
@@ -39,42 +39,26 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< double >::type enet_rel_tol(enet_rel_tolSEXP);
     Rcpp::traits::input_parameter< uint32_t >::type enet_max_iter(enet_max_iterSEXP);
     Rcpp::traits::input_parameter< bool >::type verbose(verboseSEXP);
-    Rcpp::traits::input_parameter< bool >::type include_data(include_dataSEXP);
     Rcpp::traits::input_parameter< int >::type state_track_strategy(state_track_strategySEXP);
     Rcpp::traits::input_parameter< uint64_t >::type state_track_freq(state_track_freqSEXP);
+    Rcpp::traits::input_parameter< bool >::type include_data(include_dataSEXP);
     Rcpp::traits::input_parameter< const arma::vec& >::type theta_initial(theta_initialSEXP);
     Rcpp::traits::input_parameter< const arma::vec& >::type theta_lower_bounds(theta_lower_boundsSEXP);
     Rcpp::traits::input_parameter< const arma::vec& >::type theta_upper_bounds(theta_upper_boundsSEXP);
-    Rcpp::traits::input_parameter< int >::type null_nonpen_nlopt_algorithm(null_nonpen_nlopt_algorithmSEXP);
-    Rcpp::traits::input_parameter< double >::type null_nonpen_nlopt_xtol_rel(null_nonpen_nlopt_xtol_relSEXP);
-    Rcpp::traits::input_parameter< double >::type null_nonpen_nlopt_ftol_rel(null_nonpen_nlopt_ftol_relSEXP);
-    Rcpp::traits::input_parameter< int >::type null_nonpen_nlopt_maxeval(null_nonpen_nlopt_maxevalSEXP);
-    Rcpp::traits::input_parameter< int >::type null_family_nlopt_algorithm(null_family_nlopt_algorithmSEXP);
-    Rcpp::traits::input_parameter< double >::type null_family_nlopt_xtol_rel(null_family_nlopt_xtol_relSEXP);
-    Rcpp::traits::input_parameter< double >::type null_family_nlopt_ftol_rel(null_family_nlopt_ftol_relSEXP);
-    Rcpp::traits::input_parameter< int >::type null_family_nlopt_maxeval(null_family_nlopt_maxevalSEXP);
-    Rcpp::traits::input_parameter< int >::type null_link_nlopt_algorithm(null_link_nlopt_algorithmSEXP);
-    Rcpp::traits::input_parameter< double >::type null_link_nlopt_xtol_rel(null_link_nlopt_xtol_relSEXP);
-    Rcpp::traits::input_parameter< double >::type null_link_nlopt_ftol_rel(null_link_nlopt_ftol_relSEXP);
-    Rcpp::traits::input_parameter< int >::type null_link_nlopt_maxeval(null_link_nlopt_maxevalSEXP);
-    Rcpp::traits::input_parameter< int >::type saturated_family_nlopt_algorithm(saturated_family_nlopt_algorithmSEXP);
-    Rcpp::traits::input_parameter< double >::type saturated_family_nlopt_xtol_rel(saturated_family_nlopt_xtol_relSEXP);
-    Rcpp::traits::input_parameter< double >::type saturated_family_nlopt_ftol_rel(saturated_family_nlopt_ftol_relSEXP);
-    Rcpp::traits::input_parameter< int >::type saturated_family_nlopt_maxeval(saturated_family_nlopt_maxevalSEXP);
-    Rcpp::traits::input_parameter< int >::type stagewise_nonpen_nlopt_algorithm(stagewise_nonpen_nlopt_algorithmSEXP);
-    Rcpp::traits::input_parameter< double >::type stagewise_nonpen_nlopt_xtol_rel(stagewise_nonpen_nlopt_xtol_relSEXP);
-    Rcpp::traits::input_parameter< double >::type stagewise_nonpen_nlopt_ftol_rel(stagewise_nonpen_nlopt_ftol_relSEXP);
-    Rcpp::traits::input_parameter< int >::type stagewise_nonpen_nlopt_maxeval(stagewise_nonpen_nlopt_maxevalSEXP);
-    Rcpp::traits::input_parameter< int >::type stagewise_family_nlopt_algorithm(stagewise_family_nlopt_algorithmSEXP);
-    Rcpp::traits::input_parameter< double >::type stagewise_family_nlopt_xtol_rel(stagewise_family_nlopt_xtol_relSEXP);
-    Rcpp::traits::input_parameter< double >::type stagewise_family_nlopt_ftol_rel(stagewise_family_nlopt_ftol_relSEXP);
-    Rcpp::traits::input_parameter< int >::type stagewise_family_nlopt_maxeval(stagewise_family_nlopt_maxevalSEXP);
-    Rcpp::traits::input_parameter< int >::type stagewise_link_nlopt_algorithm(stagewise_link_nlopt_algorithmSEXP);
-    Rcpp::traits::input_parameter< double >::type stagewise_link_nlopt_xtol_rel(stagewise_link_nlopt_xtol_relSEXP);
-    Rcpp::traits::input_parameter< double >::type stagewise_link_nlopt_ftol_rel(stagewise_link_nlopt_ftol_relSEXP);
-    Rcpp::traits::input_parameter< int >::type stagewise_link_nlopt_maxeval(stagewise_link_nlopt_maxevalSEXP);
+    Rcpp::traits::input_parameter< int >::type nonpen_nlopt_algorithm(nonpen_nlopt_algorithmSEXP);
+    Rcpp::traits::input_parameter< double >::type nonpen_nlopt_xtol_rel(nonpen_nlopt_xtol_relSEXP);
+    Rcpp::traits::input_parameter< double >::type nonpen_nlopt_ftol_rel(nonpen_nlopt_ftol_relSEXP);
+    Rcpp::traits::input_parameter< int >::type nonpen_nlopt_maxeval(nonpen_nlopt_maxevalSEXP);
+    Rcpp::traits::input_parameter< int >::type family_nlopt_algorithm(family_nlopt_algorithmSEXP);
+    Rcpp::traits::input_parameter< double >::type family_nlopt_xtol_rel(family_nlopt_xtol_relSEXP);
+    Rcpp::traits::input_parameter< double >::type family_nlopt_ftol_rel(family_nlopt_ftol_relSEXP);
+    Rcpp::traits::input_parameter< int >::type family_nlopt_maxeval(family_nlopt_maxevalSEXP);
+    Rcpp::traits::input_parameter< int >::type link_nlopt_algorithm(link_nlopt_algorithmSEXP);
+    Rcpp::traits::input_parameter< double >::type link_nlopt_xtol_rel(link_nlopt_xtol_relSEXP);
+    Rcpp::traits::input_parameter< double >::type link_nlopt_ftol_rel(link_nlopt_ftol_relSEXP);
+    Rcpp::traits::input_parameter< int >::type link_nlopt_maxeval(link_nlopt_maxevalSEXP);
     Rcpp::traits::input_parameter< SEXP >::type family_link(family_linkSEXP);
-    rcpp_result_gen = Rcpp::wrap(egmifs_cpp(X, y, w, offset, weight_vec, enet_alpha, epsilon_start, epsilon_max, epsilon_min, null_iteration_max, stagewise_iteration_max, null_family_parameter_abs_tol, stagewise_objective_rel_tol, stagewise_beta_step_norm_tol, family, link_func, criteria, loglik_reltol_cutoff, enet_abs_tol, enet_rel_tol, enet_max_iter, verbose, include_data, state_track_strategy, state_track_freq, theta_initial, theta_lower_bounds, theta_upper_bounds, null_nonpen_nlopt_algorithm, null_nonpen_nlopt_xtol_rel, null_nonpen_nlopt_ftol_rel, null_nonpen_nlopt_maxeval, null_family_nlopt_algorithm, null_family_nlopt_xtol_rel, null_family_nlopt_ftol_rel, null_family_nlopt_maxeval, null_link_nlopt_algorithm, null_link_nlopt_xtol_rel, null_link_nlopt_ftol_rel, null_link_nlopt_maxeval, saturated_family_nlopt_algorithm, saturated_family_nlopt_xtol_rel, saturated_family_nlopt_ftol_rel, saturated_family_nlopt_maxeval, stagewise_nonpen_nlopt_algorithm, stagewise_nonpen_nlopt_xtol_rel, stagewise_nonpen_nlopt_ftol_rel, stagewise_nonpen_nlopt_maxeval, stagewise_family_nlopt_algorithm, stagewise_family_nlopt_xtol_rel, stagewise_family_nlopt_ftol_rel, stagewise_family_nlopt_maxeval, stagewise_link_nlopt_algorithm, stagewise_link_nlopt_xtol_rel, stagewise_link_nlopt_ftol_rel, stagewise_link_nlopt_maxeval, family_link));
+    rcpp_result_gen = Rcpp::wrap(egmifs_cpp(X, y, w, offset, weight_vec, enet_alpha, epsilon_start, epsilon_max, epsilon_min, null_iteration_max, stagewise_iteration_max, null_family_parameter_abs_tol, stagewise_objective_rel_tol, stagewise_beta_step_norm_tol, family, link_func, criteria, loglik_reltol_cutoff, enet_abs_tol, enet_rel_tol, enet_max_iter, verbose, state_track_strategy, state_track_freq, include_data, theta_initial, theta_lower_bounds, theta_upper_bounds, nonpen_nlopt_algorithm, nonpen_nlopt_xtol_rel, nonpen_nlopt_ftol_rel, nonpen_nlopt_maxeval, family_nlopt_algorithm, family_nlopt_xtol_rel, family_nlopt_ftol_rel, family_nlopt_maxeval, link_nlopt_algorithm, link_nlopt_xtol_rel, link_nlopt_ftol_rel, link_nlopt_maxeval, family_link));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -295,7 +279,7 @@ END_RCPP
 }
 
 static const R_CallMethodDef CallEntries[] = {
-    {"_egmifs_egmifs_cpp", (DL_FUNC) &_egmifs_egmifs_cpp, 57},
+    {"_egmifs_egmifs_cpp", (DL_FUNC) &_egmifs_egmifs_cpp, 41},
     {"_egmifs_example_create_log_link", (DL_FUNC) &_egmifs_example_create_log_link, 0},
     {"_egmifs_example_create_softplus_link", (DL_FUNC) &_egmifs_example_create_softplus_link, 0},
     {"_egmifs_example_create_poisson_family", (DL_FUNC) &_egmifs_example_create_poisson_family, 2},

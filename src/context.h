@@ -20,24 +20,6 @@
 #include "enet.h"
 #include "debug.h"
 
-inline void check_input_dimensions(
-    const arma::mat& X,
-    const arma::vec& y,
-    const arma::mat& w,
-    const arma::vec& offset,
-    const arma::vec& weight_vec
-) {
-  if (X.n_rows == 0 || X.n_cols == 0) {
-    Rcpp::stop("matrix 'X' must have positive dimensions");
-  }
-
-  check_vector_length(y, X.n_rows, "y");
-  check_matrix_rows(w, X.n_rows, "w");
-  check_vector_length(offset, X.n_rows, "offset");
-  check_vector_length(weight_vec, X.n_cols, "weight_vec");
-}
-
-
 struct EgmifsDefaultFamilyLink final : public IEgmifsFamilyLink
 {
   const IEgmifsFamily& family;
@@ -262,30 +244,7 @@ public:
       resolve_criteria_ptrs(criteria)
   }
   {
-    check_input_dimensions(
-      api.X,
-      api.y,
-      api.w,
-      api.offset,
-      api.weight_vec
-    );
-
-    check_matrix_finite(api.X, "X");
-    check_vector_finite(api.y, "y");
-    check_matrix_finite(api.w, "w");
-    check_vector_finite(api.offset, "offset");
-    check_vector_finite(api.weight_vec, "weight_vec");
-
-    if (arma::any(api.weight_vec <= 0.0)) {
-      Rcpp::stop("value of 'weight_vec' must contain only positive values");
-    }
-
-
-    check_finite_scalar(api.enet_alpha, "enet_alpha");
-
-    if (api.enet_alpha < 0.0 || api.enet_alpha > 1.0) {
-      Rcpp::stop("value of 'enet_alpha' must be in [0, 1]");
-    }
+    validate();
   }
 
   EgmifsInputInternal(
@@ -317,9 +276,7 @@ public:
         i < api.criteria.size();
         ++i
     ) {
-      criterion_names[
-      static_cast<R_xlen_t>(i)
-      ] =
+      criterion_names[static_cast<R_xlen_t>(i)] =
         api.criteria[i]->name();
     }
 
@@ -327,36 +284,27 @@ public:
       Rcpp::Named("n") = api.X.n_rows,
       Rcpp::Named("p") = api.X.n_cols,
       Rcpp::Named("q") = api.w.n_cols,
-      Rcpp::Named("family") =
-        Rcpp::List::create(
-          Rcpp::Named(
-            api.family_link->family_name()
-          ) =
-            Rcpp::List::create(
-              Rcpp::Named("parameter_count") =
-                api.family_link->
-                family_parameter_count()
-            )
-        ),
-        Rcpp::Named("link_func") =
+      Rcpp::Named("family") = Rcpp::List::create(
+        Rcpp::Named(api.family_link->family_name()) =
           Rcpp::List::create(
-            Rcpp::Named(
-              api.family_link->link_name()
-            ) =
-              Rcpp::List::create(
-                Rcpp::Named("parameter_count") =
-                  api.family_link->
-                  link_parameter_count()
-              )
-          ),
-          Rcpp::Named("family_link_supplied") =
-            supplied_family_link_ != nullptr,
-              Rcpp::Named("criteria") =
-                criterion_names,
-                Rcpp::Named("enet_alpha") = api.enet_alpha,
-                Rcpp::Named("has_prior") = api.has_prior,
-                Rcpp::Named("weight_vec") =
-                  egmifs::output::to_r_vector(api.weight_vec)
+            Rcpp::Named("parameter_count") =
+              api.family_link->family_parameter_count()
+          )
+      ),
+      Rcpp::Named("link_func") = Rcpp::List::create(
+        Rcpp::Named(api.family_link->link_name()) =
+          Rcpp::List::create(
+            Rcpp::Named("parameter_count") =
+              api.family_link->link_parameter_count()
+          )
+      ),
+      Rcpp::Named("family_link_supplied") =
+        supplied_family_link_ != nullptr,
+      Rcpp::Named("criteria") = criterion_names,
+      Rcpp::Named("enet_alpha") = api.enet_alpha,
+      Rcpp::Named("has_prior") = api.has_prior,
+      Rcpp::Named("weight_vec") =
+        egmifs::output::to_r_vector(api.weight_vec)
     );
 
     if (include_data) {
@@ -371,6 +319,49 @@ public:
   }
 
 private:
+  void validate() const
+  {
+    validate_dimensions();
+
+    check_matrix_finite(api.X, "X");
+    check_vector_finite(api.y, "y");
+    check_matrix_finite(api.w, "w");
+    check_vector_finite(api.offset, "offset");
+    check_vector_finite(api.weight_vec, "weight_vec");
+
+    if (arma::any(api.weight_vec <= 0.0)) {
+      Rcpp::stop(
+        "value of 'weight_vec' must contain only positive values"
+      );
+    }
+
+    check_finite_scalar(api.enet_alpha, "enet_alpha");
+
+    if (api.enet_alpha < 0.0 || api.enet_alpha > 1.0) {
+      Rcpp::stop(
+        "value of 'enet_alpha' must be in [0, 1]"
+      );
+    }
+  }
+
+  void validate_dimensions() const
+  {
+    if (api.X.n_rows == 0 || api.X.n_cols == 0) {
+      Rcpp::stop(
+        "matrix 'X' must have positive dimensions"
+      );
+    }
+
+    check_vector_length(api.y, api.X.n_rows, "y");
+    check_matrix_rows(api.w, api.X.n_rows, "w");
+    check_vector_length(api.offset, api.X.n_rows, "offset");
+    check_vector_length(
+      api.weight_vec,
+      api.X.n_cols,
+      "weight_vec"
+    );
+  }
+
   static const IEgmifsFamilyLink*
     resolve_optional_family_link_ptr(
       SEXP family_link
@@ -512,9 +503,20 @@ struct EgmifsControlInternal
     const arma::vec& theta_lower_bounds,
     const arma::vec& theta_upper_bounds,
 
-    const EgmifsNloptControl& nonpen_nlopt,
-    const EgmifsNloptControl& family_nlopt,
-    const EgmifsNloptControl& link_nlopt
+    int nonpen_nlopt_algorithm,
+    double nonpen_nlopt_xtol_rel,
+    double nonpen_nlopt_ftol_rel,
+    int nonpen_nlopt_maxeval,
+
+    int family_nlopt_algorithm,
+    double family_nlopt_xtol_rel,
+    double family_nlopt_ftol_rel,
+    int family_nlopt_maxeval,
+
+    int link_nlopt_algorithm,
+    double link_nlopt_xtol_rel,
+    double link_nlopt_ftol_rel,
+    int link_nlopt_maxeval
   ) :
     api {
     null_iteration_max,
@@ -539,9 +541,27 @@ struct EgmifsControlInternal
     theta_lower_bounds,
     theta_upper_bounds,
 
-    nonpen_nlopt,
-    family_nlopt,
-    link_nlopt
+    make_nlopt_control(
+      nonpen_nlopt_algorithm,
+      nonpen_nlopt_xtol_rel,
+      nonpen_nlopt_ftol_rel,
+      nonpen_nlopt_maxeval,
+      "nonpen_nlopt"
+    ),
+    make_nlopt_control(
+      family_nlopt_algorithm,
+      family_nlopt_xtol_rel,
+      family_nlopt_ftol_rel,
+      family_nlopt_maxeval,
+      "family_nlopt"
+    ),
+    make_nlopt_control(
+      link_nlopt_algorithm,
+      link_nlopt_xtol_rel,
+      link_nlopt_ftol_rel,
+      link_nlopt_maxeval,
+      "link_nlopt"
+    )
   }
   {
     check_positive_integer(
@@ -733,22 +753,18 @@ struct EgmifsControlInternal
   }
 
 private:
-  static void check_nlopt_control(
-      const EgmifsNloptControl& nlopt_control,
+  static EgmifsNloptControl make_nlopt_control(
+      int algorithm,
+      double xtol_rel,
+      double ftol_rel,
+      int maxeval,
       const char* name
   )
   {
-    const int algorithm =
-      static_cast<int>(
-        nlopt_control.algorithm
-      );
-
     if (
         algorithm < 0 ||
           algorithm >=
-          static_cast<int>(
-            NLOPT_NUM_ALGORITHMS
-          )
+          static_cast<int>(NLOPT_NUM_ALGORITHMS)
     ) {
       Rcpp::stop(
         "%s.algorithm is not a valid NLopt algorithm",
@@ -756,6 +772,19 @@ private:
       );
     }
 
+    return EgmifsNloptControl {
+      static_cast<nlopt_algorithm>(algorithm),
+      xtol_rel,
+      ftol_rel,
+      maxeval
+    };
+  }
+
+  static void check_nlopt_control(
+      const EgmifsNloptControl& nlopt_control,
+      const char* name
+  )
+  {
     check_nonnegative_scalar(
       nlopt_control.xtol_rel,
       (std::string(name) + ".xtol_rel").c_str()
@@ -778,18 +807,10 @@ private:
   {
     return Rcpp::List::create(
       Rcpp::Named("algorithm") =
-        static_cast<int>(
-          nlopt_control.algorithm
-        ),
-
-        Rcpp::Named("xtol_rel") =
-          nlopt_control.xtol_rel,
-
-          Rcpp::Named("ftol_rel") =
-            nlopt_control.ftol_rel,
-
-            Rcpp::Named("maxeval") =
-              nlopt_control.maxeval
+        static_cast<int>(nlopt_control.algorithm),
+      Rcpp::Named("xtol_rel") = nlopt_control.xtol_rel,
+      Rcpp::Named("ftol_rel") = nlopt_control.ftol_rel,
+      Rcpp::Named("maxeval") = nlopt_control.maxeval
     );
   }
 };
@@ -1117,9 +1138,7 @@ public:
         input.criteria[i]->name().c_str()
       );
 
-      api.criteria[
-      static_cast<R_xlen_t>(i)
-      ] =
+      api.criteria[static_cast<R_xlen_t>(i)] =
         value;
     }
   }
@@ -1135,24 +1154,13 @@ public:
   {
     return Rcpp::List::create(
       Rcpp::Named("beta") =
-        egmifs::output::to_r_vector(
-          parameters.beta
-        ),
-
-        Rcpp::Named("theta") =
-          egmifs::output::to_r_vector(
-            parameters.theta
-          ),
-
-          Rcpp::Named("family_parameters") =
-            egmifs::output::to_r_vector(
-              parameters.family_parameters
-            ),
-
-            Rcpp::Named("link_parameters") =
-              egmifs::output::to_r_vector(
-                parameters.link_parameters
-              )
+        egmifs::output::to_r_vector(parameters.beta),
+      Rcpp::Named("theta") =
+        egmifs::output::to_r_vector(parameters.theta),
+      Rcpp::Named("family_parameters") =
+        egmifs::output::to_r_vector(parameters.family_parameters),
+      Rcpp::Named("link_parameters") =
+        egmifs::output::to_r_vector(parameters.link_parameters)
     );
   }
 
@@ -1161,33 +1169,17 @@ public:
   )
   {
     return Rcpp::List::create(
-      Rcpp::Named("parameters") =
-        to_list(predictors.param),
-
-        Rcpp::Named("xbeta") =
-          egmifs::output::to_r_vector(
-            predictors.xbeta
-          ),
-
-          Rcpp::Named("wtheta") =
-            egmifs::output::to_r_vector(
-              predictors.wtheta
-            ),
-
-            Rcpp::Named("eta") =
-              egmifs::output::to_r_vector(
-                predictors.eta
-              ),
-
-              Rcpp::Named("mu") =
-                egmifs::output::to_r_vector(
-                  predictors.mu
-                ),
-
-                Rcpp::Named("active_set") =
-                  egmifs::output::to_r_logical_vector(
-                    predictors.active_set
-                  )
+      Rcpp::Named("parameters") = to_list(predictors.param),
+      Rcpp::Named("xbeta") =
+        egmifs::output::to_r_vector(predictors.xbeta),
+      Rcpp::Named("wtheta") =
+        egmifs::output::to_r_vector(predictors.wtheta),
+      Rcpp::Named("eta") =
+        egmifs::output::to_r_vector(predictors.eta),
+      Rcpp::Named("mu") =
+        egmifs::output::to_r_vector(predictors.mu),
+      Rcpp::Named("active_set") =
+        egmifs::output::to_r_logical_vector(predictors.active_set)
     );
   }
 
@@ -1196,26 +1188,16 @@ public:
   )
   {
     return Rcpp::List::create(
-      Rcpp::Named("predictors") =
-        to_list(state.param),
-
-        Rcpp::Named("negloglik") =
-          state.negloglik,
-
-          Rcpp::Named("criteria") =
-            Rcpp::clone(state.criteria),
-
-            Rcpp::Named("iteration") =
-              egmifs::output::to_r_integer(
-                state.iteration,
-                "iteration"
-              ),
-
-              Rcpp::Named("pseudo_r2") =
-                state.pseudo_r2,
-
-                Rcpp::Named("elapsed_time") =
-                  state.elapsed_time
+      Rcpp::Named("predictors") = to_list(state.param),
+      Rcpp::Named("negloglik") = state.negloglik,
+      Rcpp::Named("criteria") = Rcpp::clone(state.criteria),
+      Rcpp::Named("iteration") =
+        egmifs::output::to_r_integer(
+          state.iteration,
+          "iteration"
+        ),
+      Rcpp::Named("pseudo_r2") = state.pseudo_r2,
+      Rcpp::Named("elapsed_time") = state.elapsed_time
     );
   }
 
@@ -1242,9 +1224,7 @@ private:
         i < input.criteria.size();
         ++i
     ) {
-      criterion_names[
-      static_cast<R_xlen_t>(i)
-      ] =
+      criterion_names[static_cast<R_xlen_t>(i)] =
         input.criteria[i]->name();
     }
 
@@ -1674,9 +1654,7 @@ public:
       api.best_criteria[i].name =
         input.criteria[i]->name();
 
-      api.saved_states.criteria[
-      static_cast<R_xlen_t>(i)
-      ] =
+      api.saved_states.criteria[static_cast<R_xlen_t>(i)] =
         Rcpp::NumericVector(initial_capacity);
     }
 
@@ -2035,16 +2013,11 @@ public:
       best_criterion_names[r_index] =
         best.name;
 
-      best_criteria[r_index] =
-        Rcpp::List::create(
-          Rcpp::Named("value") =
-            best.value,
-
-            Rcpp::Named("state") =
-              saved_state_to_list(
-                best.state_index
-              )
-        );
+      best_criteria[r_index] = Rcpp::List::create(
+        Rcpp::Named("value") = best.value,
+        Rcpp::Named("state") =
+          saved_state_to_list(best.state_index)
+      );
     }
 
     best_criteria.attr("names") =
@@ -2152,9 +2125,7 @@ public:
         );
 
       const Rcpp::NumericVector saved_values =
-        api.saved_states.criteria[
-      r_criterion_index
-        ];
+        api.saved_states.criteria[r_criterion_index];
 
       Rcpp::NumericVector criterion_values(
           state_count
@@ -2177,9 +2148,7 @@ public:
         state_names;
 
       criterion_names[r_criterion_index] =
-        api.best_criteria[
-      criterion_index
-        ].name;
+        api.best_criteria[criterion_index].name;
 
       criteria[r_criterion_index] =
         criterion_values;
@@ -2202,103 +2171,49 @@ public:
     mu.attr("names") = state_names;
     active_set.attr("names") = state_names;
 
-    Rcpp::List states =
-      Rcpp::List::create(
-        Rcpp::Named("iteration") =
-          iterations,
-
-          Rcpp::Named("negloglik") =
-            negloglik,
-
-            Rcpp::Named("criteria") =
-              criteria,
-
-              Rcpp::Named("pseudo_r2") =
-                pseudo_r2_values,
-
-                Rcpp::Named("elapsed_time") =
-                  elapsed_time,
-
-                  Rcpp::Named("beta") =
-                    beta,
-
-                    Rcpp::Named("theta") =
-                      theta,
-
-                      Rcpp::Named("family_parameters") =
-                        family_parameters,
-
-                        Rcpp::Named("link_parameters") =
-                          link_parameters,
-
-                          Rcpp::Named("xbeta") =
-                            xbeta,
-
-                            Rcpp::Named("wtheta") =
-                              wtheta,
-
-                              Rcpp::Named("eta") =
-                                eta,
-
-                                Rcpp::Named("mu") =
-                                  mu,
-
-                                  Rcpp::Named("active_set") =
-                                    active_set
-      );
+    Rcpp::List states = Rcpp::List::create(
+      Rcpp::Named("iteration") = iterations,
+      Rcpp::Named("negloglik") = negloglik,
+      Rcpp::Named("criteria") = criteria,
+      Rcpp::Named("pseudo_r2") = pseudo_r2_values,
+      Rcpp::Named("elapsed_time") = elapsed_time,
+      Rcpp::Named("beta") = beta,
+      Rcpp::Named("theta") = theta,
+      Rcpp::Named("family_parameters") = family_parameters,
+      Rcpp::Named("link_parameters") = link_parameters,
+      Rcpp::Named("xbeta") = xbeta,
+      Rcpp::Named("wtheta") = wtheta,
+      Rcpp::Named("eta") = eta,
+      Rcpp::Named("mu") = mu,
+      Rcpp::Named("active_set") = active_set
+    );
 
     return Rcpp::List::create(
-      Rcpp::Named("null_negloglik") =
-        api.null_negloglik,
-
-        Rcpp::Named("null_theta") =
-          egmifs::output::to_r_vector(
-            api.null_theta
-          ),
-
-          Rcpp::Named("null_family_parameters") =
-            egmifs::output::to_r_vector(
-              api.null_family_parameters
-            ),
-
-            Rcpp::Named("null_link_parameters") =
-              egmifs::output::to_r_vector(
-                api.null_link_parameters
-              ),
-
-              Rcpp::Named("saturated_negloglik") =
-                api.saturated_negloglik,
-
-                Rcpp::Named("saturated_family_parameters") =
-                  egmifs::output::to_r_vector(
-                    api.saturated_family_parameters
-                  ),
-
-                  Rcpp::Named("null_time") =
-                    api.null_time,
-
-                    Rcpp::Named("saturated_time") =
-                      api.saturated_time,
-
-                      Rcpp::Named("total_time") =
-                        api.total_time,
-
-                        Rcpp::Named("best_criteria") =
-                          best_criteria,
-
-                          Rcpp::Named("states") =
-                            states,
-
-                            Rcpp::Named("last_saved_active_set") =
-                              egmifs::output::to_r_logical_vector(
-                                api.last_saved_active_set
-                              ),
-
-                              Rcpp::Named("active_set_changed") =
-                                api.active_set_changed,
-
-                                Rcpp::Named("message") =
-                                  api.message
+      Rcpp::Named("null_negloglik") = api.null_negloglik,
+      Rcpp::Named("null_theta") =
+        egmifs::output::to_r_vector(api.null_theta),
+      Rcpp::Named("null_family_parameters") =
+        egmifs::output::to_r_vector(api.null_family_parameters),
+      Rcpp::Named("null_link_parameters") =
+        egmifs::output::to_r_vector(api.null_link_parameters),
+      Rcpp::Named("saturated_negloglik") =
+        api.saturated_negloglik,
+      Rcpp::Named("saturated_family_parameters") =
+        egmifs::output::to_r_vector(
+          api.saturated_family_parameters
+        ),
+      Rcpp::Named("null_time") = api.null_time,
+      Rcpp::Named("saturated_time") = api.saturated_time,
+      Rcpp::Named("total_time") = api.total_time,
+      Rcpp::Named("best_criteria") = best_criteria,
+      Rcpp::Named("states") = states,
+      Rcpp::Named("last_saved_active_set") =
+        egmifs::output::to_r_logical_vector(
+          api.last_saved_active_set
+        ),
+      Rcpp::Named("active_set_changed") =
+        api.active_set_changed,
+      Rcpp::Named("message") = api.message
     );
   }
 
@@ -2659,9 +2574,7 @@ private:
 
     if (
         api.state_count > 0 &&
-          api.state_indices[
-    api.state_count - 1
-          ] == r_index
+          api.state_indices[api.state_count - 1] == r_index
     ) {
       api.last_saved_active_set =
         active_set;
@@ -2671,9 +2584,7 @@ private:
 
     ensure_path_index_capacity();
 
-    api.state_indices[
-    api.state_count
-    ] =
+    api.state_indices[api.state_count] =
       r_index;
 
     ++api.state_count;
@@ -2946,9 +2857,7 @@ private:
         ++i
     ) {
       const double candidate =
-        current.criteria[
-      static_cast<R_xlen_t>(i)
-        ];
+        current.criteria[static_cast<R_xlen_t>(i)];
 
       const bool improved =
         candidate <
@@ -3001,9 +2910,7 @@ private:
 
       if (criterion_improved_[i] != 0) {
         best.value =
-          current.criteria[
-        static_cast<R_xlen_t>(i)
-          ];
+          current.criteria[static_cast<R_xlen_t>(i)];
 
         best_pending_[i] =
           1;
@@ -3165,9 +3072,7 @@ private:
         saved_values[state_index];
 
       names[i] =
-        api.best_criteria[
-      static_cast<std::size_t>(i)
-        ].name;
+        api.best_criteria[static_cast<std::size_t>(i)].name;
     }
 
     values.attr("names") =
@@ -3185,62 +3090,43 @@ private:
         state_index
       );
 
-    Rcpp::List parameters =
-      Rcpp::List::create(
-        Rcpp::Named("beta") =
-          api.saved_states.beta[state_index],
+    Rcpp::List parameters = Rcpp::List::create(
+      Rcpp::Named("beta") =
+        api.saved_states.beta[state_index],
+      Rcpp::Named("theta") =
+        api.saved_states.theta[state_index],
+      Rcpp::Named("family_parameters") =
+        api.saved_states.family_parameters[state_index],
+      Rcpp::Named("link_parameters") =
+        api.saved_states.link_parameters[state_index]
+    );
 
-                               Rcpp::Named("theta") =
-                                 api.saved_states.theta[state_index],
-
-                                                       Rcpp::Named("family_parameters") =
-                                                         api.saved_states.family_parameters[state_index],
-
-                                                                                           Rcpp::Named("link_parameters") =
-                                                                                             api.saved_states.link_parameters[state_index]
-      );
-
-    Rcpp::List predictors =
-      Rcpp::List::create(
-        Rcpp::Named("parameters") =
-          parameters,
-
-          Rcpp::Named("xbeta") =
-            api.saved_states.xbeta[state_index],
-
-                                  Rcpp::Named("wtheta") =
-                                    api.saved_states.wtheta[state_index],
-
-                                                           Rcpp::Named("eta") =
-                                                             api.saved_states.eta[state_index],
-
-                                                                                 Rcpp::Named("mu") =
-                                                                                   api.saved_states.mu[state_index],
-
-                                                                                                      Rcpp::Named("active_set") =
-                                                                                                        api.saved_states.active_set[state_index]
-      );
+    Rcpp::List predictors = Rcpp::List::create(
+      Rcpp::Named("parameters") = parameters,
+      Rcpp::Named("xbeta") =
+        api.saved_states.xbeta[state_index],
+      Rcpp::Named("wtheta") =
+        api.saved_states.wtheta[state_index],
+      Rcpp::Named("eta") =
+        api.saved_states.eta[state_index],
+      Rcpp::Named("mu") =
+        api.saved_states.mu[state_index],
+      Rcpp::Named("active_set") =
+        api.saved_states.active_set[state_index]
+    );
 
     return Rcpp::List::create(
-      Rcpp::Named("predictors") =
-        predictors,
-
-        Rcpp::Named("negloglik") =
-          api.saved_states.negloglik[state_index],
-
-                                    Rcpp::Named("criteria") =
-                                      saved_criteria_at(
-                                        state_index
-                                      ),
-
-                                      Rcpp::Named("iteration") =
-                                        api.saved_states.iterations[state_index],
-
-                                                                   Rcpp::Named("pseudo_r2") =
-                                                                     api.saved_states.pseudo_r2[state_index],
-
-                                                                                               Rcpp::Named("elapsed_time") =
-                                                                                                 api.saved_states.elapsed_time[state_index]
+      Rcpp::Named("predictors") = predictors,
+      Rcpp::Named("negloglik") =
+        api.saved_states.negloglik[state_index],
+      Rcpp::Named("criteria") =
+        saved_criteria_at(state_index),
+      Rcpp::Named("iteration") =
+        api.saved_states.iterations[state_index],
+      Rcpp::Named("pseudo_r2") =
+        api.saved_states.pseudo_r2[state_index],
+      Rcpp::Named("elapsed_time") =
+        api.saved_states.elapsed_time[state_index]
     );
   }
 };
@@ -3417,20 +3303,13 @@ public:
   Rcpp::List to_list() const
   {
     return Rcpp::List::create(
-      Rcpp::Named("phase") =
-        static_cast<int>(api.phase),
-
-        Rcpp::Named("termination_reason") =
-          static_cast<int>(api.termination_reason),
-
-          Rcpp::Named("termination_detail") =
-            api.termination_detail,
-
-            Rcpp::Named("epsilon") =
-              api.epsilon,
-
-              Rcpp::Named("halving_count") =
-                api.halving_count
+      Rcpp::Named("phase") = static_cast<int>(api.phase),
+      Rcpp::Named("termination_reason") =
+        static_cast<int>(api.termination_reason),
+      Rcpp::Named("termination_detail") =
+        api.termination_detail,
+      Rcpp::Named("epsilon") = api.epsilon,
+      Rcpp::Named("halving_count") = api.halving_count
     );
   }
 
@@ -4725,9 +4604,21 @@ struct EgmifsContextInternal
     const arma::vec& theta_lower_bounds,
     const arma::vec& theta_upper_bounds,
 
-    const EgmifsNloptControl& nonpen_nlopt,
-    const EgmifsNloptControl& family_nlopt,
-    const EgmifsNloptControl& link_nlopt,
+    int nonpen_nlopt_algorithm,
+    double nonpen_nlopt_xtol_rel,
+    double nonpen_nlopt_ftol_rel,
+    int nonpen_nlopt_maxeval,
+
+    int family_nlopt_algorithm,
+    double family_nlopt_xtol_rel,
+    double family_nlopt_ftol_rel,
+    int family_nlopt_maxeval,
+
+    int link_nlopt_algorithm,
+    double link_nlopt_xtol_rel,
+    double link_nlopt_ftol_rel,
+    int link_nlopt_maxeval,
+
     SEXP family_link
   ) :
     input(
@@ -4766,9 +4657,20 @@ struct EgmifsContextInternal
       theta_lower_bounds,
       theta_upper_bounds,
 
-      nonpen_nlopt,
-      family_nlopt,
-      link_nlopt
+      nonpen_nlopt_algorithm,
+      nonpen_nlopt_xtol_rel,
+      nonpen_nlopt_ftol_rel,
+      nonpen_nlopt_maxeval,
+
+      family_nlopt_algorithm,
+      family_nlopt_xtol_rel,
+      family_nlopt_ftol_rel,
+      family_nlopt_maxeval,
+
+      link_nlopt_algorithm,
+      link_nlopt_xtol_rel,
+      link_nlopt_ftol_rel,
+      link_nlopt_maxeval
     ),
     state(
       input.api,
@@ -4830,21 +4732,12 @@ struct EgmifsContextInternal
   {
     return Rcpp::List::create(
       Rcpp::Named("input") =
-        input.to_list(
-          control.api.include_data
-        ),
-
-        Rcpp::Named("control") =
-          control.to_list(),
-
-          Rcpp::Named("terminal_state") =
-            path.current_state_to_list(),
-
-            Rcpp::Named("path") =
-              path.to_list(),
-
-              Rcpp::Named("stagewise") =
-                stagewise.to_list()
+        input.to_list(control.api.include_data),
+      Rcpp::Named("control") = control.to_list(),
+      Rcpp::Named("terminal_state") =
+        path.current_state_to_list(),
+      Rcpp::Named("path") = path.to_list(),
+      Rcpp::Named("stagewise") = stagewise.to_list()
     );
   }
 };

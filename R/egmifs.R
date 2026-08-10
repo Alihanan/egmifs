@@ -144,6 +144,8 @@ egmifs <- function(
     stop("value of 'y' must contain finite non-negative values", call. = FALSE)
   }
 
+  storage.mode(X) <- "double"
+
   if (!is.logical(intercept) || length(intercept) != 1L || is.na(intercept)) {
     stop("value of 'intercept' must be TRUE or FALSE", call. = FALSE)
   }
@@ -172,6 +174,8 @@ egmifs <- function(
       stop("value of 'w' must contain at least one column", call. = FALSE)
     }
   }
+
+  storage.mode(w) <- "double"
 
   if (is.null(offset)) {
     offset <- rep(0, nrow(X))
@@ -419,77 +423,39 @@ egmifs <- function(
     enet_max_iter = control$enet.max.iter,
 
     verbose = isTRUE(verbose) || isTRUE(control$verbose),
-    include_data = isTRUE(include.data) || isTRUE(control$include.data),
     state_track_strategy = strategy,
     state_track_freq = control$state.track.freq,
+    include_data = isTRUE(include.data) || isTRUE(control$include.data),
 
     theta_initial = theta.initial,
     theta_lower_bounds = theta.lower.bounds,
     theta_upper_bounds = theta.upper.bounds,
 
-    # RcppExports is intentionally unchanged. Its existing phase-specific
-    # boundary arguments receive the same parameter-block control values.
-    null_nonpen_nlopt_algorithm =
+    nonpen_nlopt_algorithm =
       control$nonpen.nlopt.algorithm,
-    null_nonpen_nlopt_xtol_rel =
+    nonpen_nlopt_xtol_rel =
       control$nonpen.nlopt.xtol.rel,
-    null_nonpen_nlopt_ftol_rel =
+    nonpen_nlopt_ftol_rel =
       control$nonpen.nlopt.ftol.rel,
-    null_nonpen_nlopt_maxeval =
+    nonpen_nlopt_maxeval =
       control$nonpen.nlopt.maxeval,
 
-    null_family_nlopt_algorithm =
+    family_nlopt_algorithm =
       control$family.nlopt.algorithm,
-    null_family_nlopt_xtol_rel =
+    family_nlopt_xtol_rel =
       control$family.nlopt.xtol.rel,
-    null_family_nlopt_ftol_rel =
+    family_nlopt_ftol_rel =
       control$family.nlopt.ftol.rel,
-    null_family_nlopt_maxeval =
+    family_nlopt_maxeval =
       control$family.nlopt.maxeval,
 
-    null_link_nlopt_algorithm =
+    link_nlopt_algorithm =
       control$link.nlopt.algorithm,
-    null_link_nlopt_xtol_rel =
+    link_nlopt_xtol_rel =
       control$link.nlopt.xtol.rel,
-    null_link_nlopt_ftol_rel =
+    link_nlopt_ftol_rel =
       control$link.nlopt.ftol.rel,
-    null_link_nlopt_maxeval =
-      control$link.nlopt.maxeval,
-
-    saturated_family_nlopt_algorithm =
-      control$family.nlopt.algorithm,
-    saturated_family_nlopt_xtol_rel =
-      control$family.nlopt.xtol.rel,
-    saturated_family_nlopt_ftol_rel =
-      control$family.nlopt.ftol.rel,
-    saturated_family_nlopt_maxeval =
-      control$family.nlopt.maxeval,
-
-    stagewise_nonpen_nlopt_algorithm =
-      control$nonpen.nlopt.algorithm,
-    stagewise_nonpen_nlopt_xtol_rel =
-      control$nonpen.nlopt.xtol.rel,
-    stagewise_nonpen_nlopt_ftol_rel =
-      control$nonpen.nlopt.ftol.rel,
-    stagewise_nonpen_nlopt_maxeval =
-      control$nonpen.nlopt.maxeval,
-
-    stagewise_family_nlopt_algorithm =
-      control$family.nlopt.algorithm,
-    stagewise_family_nlopt_xtol_rel =
-      control$family.nlopt.xtol.rel,
-    stagewise_family_nlopt_ftol_rel =
-      control$family.nlopt.ftol.rel,
-    stagewise_family_nlopt_maxeval =
-      control$family.nlopt.maxeval,
-
-    stagewise_link_nlopt_algorithm =
-      control$link.nlopt.algorithm,
-    stagewise_link_nlopt_xtol_rel =
-      control$link.nlopt.xtol.rel,
-    stagewise_link_nlopt_ftol_rel =
-      control$link.nlopt.ftol.rel,
-    stagewise_link_nlopt_maxeval =
+    link_nlopt_maxeval =
       control$link.nlopt.maxeval,
 
     family_link = family.link.pointer
