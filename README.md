@@ -1,25 +1,33 @@
+
 # egmifs
 
-`egmifs` is an R package for fitting extended generalized monotone incremental forward stagewise models for high-dimensional count data.
+`egmifs` is an R package for fitting extended generalized monotone
+incremental forward stagewise models for high-dimensional count data.
 
-The package is designed for sparse regression problems where the response is count-valued and the number of predictors may be large relative to the number of samples. It supports negative-binomial and Poisson model families, elastic-net-style stagewise updates, prior-weighted penalties, unpenalized covariates, offsets, and information-criterion-based model selection along the solution path.
+The package is designed for sparse regression problems where the
+response is count-valued and the number of predictors may be large
+relative to the number of samples. It supports negative-binomial and
+Poisson model families, elastic-net-style stagewise updates,
+prior-weighted penalties, unpenalized covariates, offsets, and
+information-criterion-based model selection along the solution path.
 
 ## Installation
 
 Install the package from GitHub:
 
-```r
+``` r
 if (!requireNamespace("remotes", quietly = TRUE)) {
   install.packages("remotes")
 }
 remotes::install_github("Alihanan/egmifs")
 ```
 
-For substantive analyses, increase this value or omit the explicit example control and use the package default.
+For substantive analyses, increase this value or omit the explicit
+example control and use the package default.
 
 ## Basic usage
 
-```r
+``` r
 library(egmifs)
 
 set.seed(1)
@@ -42,9 +50,12 @@ plot(fit)
 
 ## Packaged RNA-seq example dataset
 
-The package includes `mrna97_rnaseq`, an RNA-seq example dataset derived from the regulatory-network setting described by Anuarbekov and Kléma (2025). The original test set used in the paper is not included in this package dataset.
+The package includes `mrna97_rnaseq`, an RNA-seq example dataset derived
+from the regulatory-network setting described by Anuarbekov and Kléma
+(2025). The original test set used in the paper is not included in this
+package dataset.
 
-```r
+``` r
 data(mrna97_rnaseq)
 
 names(mrna97_rnaseq)
@@ -54,11 +65,14 @@ dim(mrna97_rnaseq$prior)
 dim(mrna97_rnaseq$truth)
 ```
 
-For the packaged object used here, `Y` has 434 samples and 97 target mRNAs, `X` has 434 samples and 2636 candidate predictors, and the prior/reference matrices use **predictor-by-target orientation**. Thus, for target `j`, use `prior[, j]` and `truth[, j]`.
+For the packaged object used here, `Y` has 434 samples and 97 target
+mRNAs, `X` has 434 samples and 2636 candidate predictors, and the
+prior/reference matrices use **predictor-by-target orientation**. Thus,
+for target `j`, use `prior[, j]` and `truth[, j]`.
 
 A single-target prior-weighted fit is therefore:
 
-```r
+``` r
 library(egmifs)
 data(mrna97_rnaseq)
 
@@ -84,19 +98,26 @@ fit <- egmifs(
 
 ## Packaged T-100 airport passenger-flow dataset
 
-The package also includes `airport_t100`, a monthly U.S. airport passenger-flow dataset derived from the Bureau of Transportation Statistics T-100 Domestic Segment benchmark. The data cover January 1990 through December 2025, giving 432 monthly observations.
+The package also includes `airport_t100`, a monthly U.S. airport
+passenger-flow dataset derived from the Bureau of Transportation
+Statistics T-100 Domestic Segment benchmark. The data cover January 1990
+through December 2025, giving 432 monthly observations.
 
-The object contains an airport-level monthly count matrix together with directed route-reference matrices at several temporal-persistence thresholds:
+The object contains an airport-level monthly count matrix together with
+directed route-reference matrices at several temporal-persistence
+thresholds:
 
-* `GT1`: route observed in at least 1 month;
-* `GT12`: route observed in at least 12 months;
-* `GT120`: route observed in at least 120 months;
-* `GT216`: route observed in at least 216 months;
-* `GT432`: route observed in all 432 months.
+- `GT1`: route observed in at least 1 month;
+- `GT12`: route observed in at least 12 months;
+- `GT120`: route observed in at least 120 months;
+- `GT216`: route observed in at least 216 months;
+- `GT432`: route observed in all 432 months.
 
-The reference matrices use destination-by-origin orientation. For destination airport `i`, the response is the corresponding airport count series and the remaining airport series are candidate predictors.
+The reference matrices use destination-by-origin orientation. For
+destination airport `i`, the response is the corresponding airport count
+series and the remaining airport series are candidate predictors.
 
-```r
+``` r
 library(egmifs)
 data(airport_t100)
 
@@ -124,9 +145,10 @@ fit_airport <- egmifs(
 
 ## Preprocessing utilities
 
-For RNA-seq-style count matrices, sample-level normalization can be applied before predictor transformation:
+For RNA-seq-style count matrices, sample-level normalization can be
+applied before predictor transformation:
 
-```r
+``` r
 library(egmifs)
 data(mrna97_rnaseq)
 
@@ -145,22 +167,24 @@ X_pre <- transform_predictors(
 
 Available count normalizations are:
 
-* `"none"`: keep the original scale;
-* `"cpm"`: counts per million scaling;
-* `"tmm"`: TMM normalization through `edgeR`, if `edgeR` is installed.
+- `"none"`: keep the original scale;
+- `"cpm"`: counts per million scaling;
+- `"tmm"`: TMM normalization through `edgeR`, if `edgeR` is installed.
 
 Available RNA-seq predictor transformations are:
 
-* `"none"`
-* `"log1p"`
-* `"asinh"`
-* `"standardize"`
-* `"standardize_log1p"`
-* `"standardize_asinh"`
+- `"none"`
+- `"log1p"`
+- `"asinh"`
+- `"standardize"`
+- `"standardize_log1p"`
+- `"standardize_asinh"`
 
-For negative-binomial models, the response should usually remain on the original count scale. When a sample-level offset is needed, request the normalization factor and pass it to `egmifs()`:
+For negative-binomial models, the response should usually remain on the
+original count scale. When a sample-level offset is needed, request the
+normalization factor and pass it to `egmifs()`:
 
-```r
+``` r
 library(egmifs)
 data(mrna97_rnaseq)
 
@@ -184,9 +208,10 @@ fit_offset <- egmifs(
 )
 ```
 
-For monthly airport passenger-flow matrices, temporal transformations can reduce seasonal and system-wide temporal effects:
+For monthly airport passenger-flow matrices, temporal transformations
+can reduce seasonal and system-wide temporal effects:
 
-```r
+``` r
 library(egmifs)
 data(airport_t100)
 
@@ -202,19 +227,21 @@ X_air <- transform_time_series(
 
 Available temporal transformations are:
 
-* `"none"`
-* `"log1p_month_demean"`
-* `"month_z"`
-* `"log1p_month_z"`
-* `"log1p_gaussian_smooth"`
-* `"log1p_gaussian_smooth_month_demean"`
-* `"log1p_diff1"`
+- `"none"`
+- `"log1p_month_demean"`
+- `"month_z"`
+- `"log1p_month_z"`
+- `"log1p_gaussian_smooth"`
+- `"log1p_gaussian_smooth_month_demean"`
+- `"log1p_diff1"`
 
 ## Prior-weighted fitting
 
-Prior information can be supplied through `weight.vec`. Smaller weights reduce the penalty for selected predictors. This example defines its own data and weights and can be run independently:
+Prior information can be supplied through `weight.vec`. Smaller weights
+reduce the penalty for selected predictors. This example defines its own
+data and weights and can be run independently:
 
-```r
+``` r
 library(egmifs)
 
 set.seed(2)
@@ -234,9 +261,10 @@ fit_prior <- egmifs(
 )
 ```
 
-For the packaged RNA-seq dataset, use the **column** corresponding to target `j` because the stored prior matrix is predictor by target:
+For the packaged RNA-seq dataset, use the **column** corresponding to
+target `j` because the stored prior matrix is predictor by target:
 
-```r
+``` r
 library(egmifs)
 data(mrna97_rnaseq)
 
@@ -260,11 +288,14 @@ fit_prior <- egmifs(
 
 ## Modular families, links, and criteria
 
-Families, link functions, fused family-link implementations, and information criteria are interchangeable modules. Each example below defines its own data.
+Families, link functions, fused family-link implementations, and
+information criteria are interchangeable modules. Each example below
+defines its own data.
 
-Built-in modules avoid runtime compilation and are the simplest choice for ordinary fits:
+Built-in modules avoid runtime compilation and are the simplest choice
+for ordinary fits:
 
-```r
+``` r
 library(egmifs)
 
 set.seed(3)
@@ -285,9 +316,11 @@ fit_modular <- egmifs(
 )
 ```
 
-The same fitting interface can mix implementations. For example, the family can remain built in while the link is an R closure and one criterion is live-compiled C++:
+The same fitting interface can mix implementations. For example, the
+family can remain built in while the link is an R closure and one
+criterion is live-compiled C++:
 
-```r
+``` r
 library(egmifs)
 
 set.seed(4)
@@ -320,11 +353,14 @@ fit_mixed <- egmifs(
 )
 ```
 
-`gamma` is specific to EBIC. `cache` is specific to `implementation = "live"`. The available criterion implementations are `"builtin"`, `"live"`, `"r.environment"`, and `"r.closure"`.
+`gamma` is specific to EBIC. `cache` is specific to
+`implementation = "live"`. The available criterion implementations are
+`"builtin"`, `"live"`, `"r.environment"`, and `"r.closure"`.
 
-A fused family-link module can be supplied instead of separate family and link modules:
+A fused family-link module can be supplied instead of separate family
+and link modules:
 
-```r
+``` r
 library(egmifs)
 
 set.seed(5)
@@ -346,9 +382,10 @@ fit_fused <- egmifs(
 
 ## Extracting coefficients
 
-The following complete example creates a fit and then extracts several points from its path:
+The following complete example creates a fit and then extracts several
+points from its path:
 
-```r
+``` r
 library(egmifs)
 
 set.seed(6)
@@ -388,7 +425,7 @@ beta_by_iteration <- coef(
 
 For a multi-alpha object, select alpha directly:
 
-```r
+``` r
 library(egmifs)
 
 set.seed(7)
@@ -416,7 +453,7 @@ beta_alpha <- coef(
 
 For a prior-strength grid, select both alpha and eta:
 
-```r
+``` r
 library(egmifs)
 
 set.seed(8)
@@ -460,11 +497,13 @@ beta_grid <- coef(
 
 ## Extracting all fitted parameters
 
-`parameters()` returns every optimized parameter group: penalized coefficients (`beta`), unpenalized coefficients (`theta`), family parameters, and link parameters. `params()` is the shorter alias.
+`parameters()` returns every optimized parameter group: penalized
+coefficients (`beta`), unpenalized coefficients (`theta`), family
+parameters, and link parameters. `params()` is the shorter alias.
 
 This example defines and fits its own data before calling the accessors:
 
-```r
+``` r
 library(egmifs)
 
 set.seed(9)
@@ -523,15 +562,21 @@ link_at_terminal <- lparams(
 )
 ```
 
-The preferred compact aliases are `bparams()`, `thparams()`, `fparams()`, and `lparams()`. Descriptive aliases such as `beta.parameters()`, `pen.parameters()`, `theta.parameters()`, `nonpen.parameters()`, `family.parameters()`, and `link.parameters()` are also exported.
+The preferred compact aliases are `bparams()`, `thparams()`,
+`fparams()`, and `lparams()`. Descriptive aliases such as
+`beta.parameters()`, `pen.parameters()`, `theta.parameters()`,
+`nonpen.parameters()`, `family.parameters()`, and `link.parameters()`
+are also exported.
 
-Parameter-free families or links return zero-length vectors for one state and zero-column matrices for paths.
+Parameter-free families or links return zero-length vectors for one
+state and zero-column matrices for paths.
 
 ## Inspecting the fitted model modules
 
-The following example is self-contained and shows `family()`, `link()`, and `criteria()` metadata:
+The following example is self-contained and shows `family()`, `link()`,
+and `criteria()` metadata:
 
-```r
+``` r
 library(egmifs)
 
 set.seed(10)
@@ -569,9 +614,10 @@ criterion_info$selected
 
 ## Model-selection criteria
 
-The compact `criterion()` constructor covers the standard criterion and degrees-of-freedom combinations:
+The compact `criterion()` constructor covers the standard criterion and
+degrees-of-freedom combinations:
 
-```r
+``` r
 library(egmifs)
 
 criteria <- list(
@@ -582,35 +628,48 @@ criteria <- list(
 )
 ```
 
-The older constructors such as `AIC_nnz()` and `BIC_hedf()` remain available for compatibility.
+The older constructors such as `AIC_nnz()` and `BIC_hedf()` remain
+available for compatibility.
 
 ## Main features
 
-* Stagewise sparse regression for high-dimensional count outcomes
-* Negative-binomial and Poisson model families
-* Elastic-net mixing through `enet.alpha`
-* Optional prior-weighted penalty rescaling
-* Support for offsets and unpenalized covariates through `offset` and `w`
-* Information-criterion-based solution-path selection
-* Runtime-compilable custom C++ selection criteria with read-only context access
-* Public RNA-seq and T-100 airport example datasets
-* R interface with C++ implementation through Rcpp
+- Stagewise sparse regression for high-dimensional count outcomes
+- Negative-binomial and Poisson model families
+- Elastic-net mixing through `enet.alpha`
+- Optional prior-weighted penalty rescaling
+- Support for offsets and unpenalized covariates through `offset` and
+  `w`
+- Information-criterion-based solution-path selection
+- Runtime-compilable custom C++ selection criteria with read-only
+  context access
+- Public RNA-seq and T-100 airport example datasets
+- R interface with C++ implementation through Rcpp
 
 ## Related paper
 
 This package accompanies the manuscript:
 
-**Extended generalized monotone incremental forward stagewise regression for penalized negative binomial path-following modeling of high-dimensional count data**  
+**Extended generalized monotone incremental forward stagewise regression
+for penalized negative binomial path-following modeling of
+high-dimensional count data**  
 Alikhan Anuarbekov and Jiří Kléma
 
-The packaged `mrna97_rnaseq` dataset is adapted from the RNA-seq and prior-knowledge setup described in:
+The packaged `mrna97_rnaseq` dataset is adapted from the RNA-seq and
+prior-knowledge setup described in:
 
-Anuarbekov, A. and Kléma, J. (2025). Utilizing RNA-seq data in monotone iterative generalized linear model to elevate prior knowledge quality of the circRNA-miRNA-mRNA regulatory axis. *BMC Bioinformatics*, 26, 139. https://doi.org/10.1186/s12859-025-06161-w
+Anuarbekov, A. and Kléma, J. (2025). Utilizing RNA-seq data in monotone
+iterative generalized linear model to elevate prior knowledge quality of
+the circRNA-miRNA-mRNA regulatory axis. *BMC Bioinformatics*, 26, 139.
+<https://doi.org/10.1186/s12859-025-06161-w>
 
-The packaged `airport_t100` dataset is adapted from the U.S. Bureau of Transportation Statistics T-100 Domestic Segment passenger-flow benchmark used in the accompanying eGMIFS study.
+The packaged `airport_t100` dataset is adapted from the U.S. Bureau of
+Transportation Statistics T-100 Domestic Segment passenger-flow
+benchmark used in the accompanying eGMIFS study.
 
-Please cite the associated paper if you use this package or dataset in academic work.
+Please cite the associated paper if you use this package or dataset in
+academic work.
 
 ## License
 
-This package is licensed under the MIT License. See the `LICENSE` file for details.
+This package is licensed under the MIT License. See the `LICENSE` file
+for details.

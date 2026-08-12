@@ -286,12 +286,23 @@ Rcpp::List input_to_list(
     const EgmifsInput& input
 )
 {
+  // Keep every newly allocated R object in a PreserveStorage-backed wrapper
+  // before constructing the list. R-backed plugins can allocate heavily and
+  // trigger garbage collection while this function is assembling callback
+  // arguments. Passing several raw wrap(...) SEXPs directly to List::create()
+  // leaves earlier temporaries vulnerable until the call is entered.
+  const Rcpp::RObject X = Rcpp::wrap(input.X);
+  const Rcpp::RObject y = Rcpp::wrap(input.y);
+  const Rcpp::RObject w = Rcpp::wrap(input.w);
+  const Rcpp::RObject offset = Rcpp::wrap(input.offset);
+  const Rcpp::RObject weight_vec = Rcpp::wrap(input.weight_vec);
+
   return Rcpp::List::create(
-    Rcpp::Named("X") = Rcpp::wrap(input.X),
-    Rcpp::Named("y") = Rcpp::wrap(input.y),
-    Rcpp::Named("w") = Rcpp::wrap(input.w),
-    Rcpp::Named("offset") = Rcpp::wrap(input.offset),
-    Rcpp::Named("weight_vec") = Rcpp::wrap(input.weight_vec),
+    Rcpp::Named("X") = X,
+    Rcpp::Named("y") = y,
+    Rcpp::Named("w") = w,
+    Rcpp::Named("offset") = offset,
+    Rcpp::Named("weight_vec") = weight_vec,
     Rcpp::Named("n") = input.X.n_rows,
     Rcpp::Named("p") = input.X.n_cols,
     Rcpp::Named("q") = input.w.n_cols,
@@ -328,6 +339,13 @@ Rcpp::List control_to_list(
     const EgmifsControl& control
 )
 {
+  const Rcpp::RObject theta_initial =
+    Rcpp::wrap(control.theta_initial);
+  const Rcpp::RObject theta_lower_bounds =
+    Rcpp::wrap(control.theta_lower_bounds);
+  const Rcpp::RObject theta_upper_bounds =
+    Rcpp::wrap(control.theta_upper_bounds);
+
   Rcpp::List result = Rcpp::List::create(
     Rcpp::Named("null_iteration_max") =
       control.null_iteration_max,
@@ -362,11 +380,11 @@ Rcpp::List control_to_list(
     Rcpp::Named("include_data") =
       control.include_data,
     Rcpp::Named("theta_initial") =
-      Rcpp::wrap(control.theta_initial),
+      theta_initial,
     Rcpp::Named("theta_lower_bounds") =
-      Rcpp::wrap(control.theta_lower_bounds),
+      theta_lower_bounds,
     Rcpp::Named("theta_upper_bounds") =
-      Rcpp::wrap(control.theta_upper_bounds)
+      theta_upper_bounds
   );
 
   result.push_back(
@@ -397,29 +415,40 @@ Rcpp::List state_to_list(
   const EgmifsParameters& parameters =
     predictors.param;
 
+  const Rcpp::RObject beta =
+    Rcpp::wrap(parameters.beta);
+  const Rcpp::RObject theta =
+    Rcpp::wrap(parameters.theta);
+  const Rcpp::RObject family_parameters =
+    Rcpp::wrap(parameters.family_parameters);
+  const Rcpp::RObject link_parameters =
+    Rcpp::wrap(parameters.link_parameters);
+  const Rcpp::RObject xbeta =
+    Rcpp::wrap(predictors.xbeta);
+  const Rcpp::RObject wtheta =
+    Rcpp::wrap(predictors.wtheta);
+  const Rcpp::RObject eta =
+    Rcpp::wrap(predictors.eta);
+  const Rcpp::RObject mu =
+    Rcpp::wrap(predictors.mu);
+  const Rcpp::RObject active_set =
+    Rcpp::wrap(predictors.active_set);
+  const Rcpp::RObject criteria =
+    Rcpp::clone(state.criteria);
+
   return Rcpp::List::create(
-    Rcpp::Named("beta") =
-      Rcpp::wrap(parameters.beta),
-    Rcpp::Named("theta") =
-      Rcpp::wrap(parameters.theta),
-    Rcpp::Named("family_parameters") =
-      Rcpp::wrap(parameters.family_parameters),
-    Rcpp::Named("link_parameters") =
-      Rcpp::wrap(parameters.link_parameters),
-    Rcpp::Named("xbeta") =
-      Rcpp::wrap(predictors.xbeta),
-    Rcpp::Named("wtheta") =
-      Rcpp::wrap(predictors.wtheta),
-    Rcpp::Named("eta") =
-      Rcpp::wrap(predictors.eta),
-    Rcpp::Named("mu") =
-      Rcpp::wrap(predictors.mu),
-    Rcpp::Named("active_set") =
-      Rcpp::wrap(predictors.active_set),
+    Rcpp::Named("beta") = beta,
+    Rcpp::Named("theta") = theta,
+    Rcpp::Named("family_parameters") = family_parameters,
+    Rcpp::Named("link_parameters") = link_parameters,
+    Rcpp::Named("xbeta") = xbeta,
+    Rcpp::Named("wtheta") = wtheta,
+    Rcpp::Named("eta") = eta,
+    Rcpp::Named("mu") = mu,
+    Rcpp::Named("active_set") = active_set,
     Rcpp::Named("negloglik") =
       state.negloglik,
-    Rcpp::Named("criteria") =
-      Rcpp::clone(state.criteria),
+    Rcpp::Named("criteria") = criteria,
     Rcpp::Named("iteration") =
       state.iteration,
     Rcpp::Named("pseudo_r2") =
@@ -505,9 +534,14 @@ public:
       const EgmifsControl& control
   ) const override
   {
+    const Rcpp::List input_r =
+      input_to_list(input);
+    const Rcpp::List control_r =
+      control_to_list(control);
+
     prepare_(
-      input_to_list(input),
-      control_to_list(control),
+      input_r,
+      control_r,
       environment_
     );
   }
@@ -525,10 +559,14 @@ public:
       parameter_count()
     );
 
+    const Rcpp::RObject eta_r = Rcpp::wrap(eta);
+    const Rcpp::RObject link_parameters_r =
+      Rcpp::wrap(link_parameters);
+
     copy_vector_result(
       inverse_(
-        Rcpp::wrap(eta),
-        Rcpp::wrap(link_parameters),
+        eta_r,
+        link_parameters_r,
         environment_
       ),
       mu,
@@ -553,11 +591,15 @@ public:
       parameter_count()
     );
 
+    const Rcpp::RObject eta_r = Rcpp::wrap(eta);
+    const Rcpp::RObject link_parameters_r =
+      Rcpp::wrap(link_parameters);
+
     const Rcpp::List result =
       require_list_result(
         grad_(
-          Rcpp::wrap(eta),
-          Rcpp::wrap(link_parameters),
+          eta_r,
+          link_parameters_r,
           environment_
         ),
         name_,
@@ -671,9 +713,14 @@ public:
       const EgmifsControl& control
   ) const override
   {
+    const Rcpp::List input_r =
+      input_to_list(input);
+    const Rcpp::List control_r =
+      control_to_list(control);
+
     prepare_(
-      input_to_list(input),
-      control_to_list(control),
+      input_r,
+      control_r,
       environment_
     );
   }
@@ -699,11 +746,16 @@ public:
       parameter_count()
     );
 
+    const Rcpp::RObject y_r = Rcpp::wrap(y);
+    const Rcpp::RObject mu_r = Rcpp::wrap(mu);
+    const Rcpp::RObject family_parameters_r =
+      Rcpp::wrap(family_parameters);
+
     negloglik = require_scalar_result(
       negloglik_(
-        Rcpp::wrap(y),
-        Rcpp::wrap(mu),
-        Rcpp::wrap(family_parameters),
+        y_r,
+        mu_r,
+        family_parameters_r,
         environment_
       ),
       name_,
@@ -733,12 +785,17 @@ public:
       parameter_count()
     );
 
+    const Rcpp::RObject y_r = Rcpp::wrap(y);
+    const Rcpp::RObject mu_r = Rcpp::wrap(mu);
+    const Rcpp::RObject family_parameters_r =
+      Rcpp::wrap(family_parameters);
+
     const Rcpp::List result =
       require_list_result(
         grad_(
-          Rcpp::wrap(y),
-          Rcpp::wrap(mu),
-          Rcpp::wrap(family_parameters),
+          y_r,
+          mu_r,
+          family_parameters_r,
           environment_
         ),
         name_,
@@ -913,9 +970,14 @@ public:
       const EgmifsControl& control
   ) const override
   {
+    const Rcpp::List input_r =
+      input_to_list(input);
+    const Rcpp::List control_r =
+      control_to_list(control);
+
     prepare_(
-      input_to_list(input),
-      control_to_list(control),
+      input_r,
+      control_r,
       environment_
     );
   }
@@ -933,10 +995,14 @@ public:
       link_parameter_count()
     );
 
+    const Rcpp::RObject eta_r = Rcpp::wrap(eta);
+    const Rcpp::RObject link_parameters_r =
+      Rcpp::wrap(link_parameters);
+
     copy_vector_result(
       inverse_(
-        Rcpp::wrap(eta),
-        Rcpp::wrap(link_parameters),
+        eta_r,
+        link_parameters_r,
         environment_
       ),
       mu,
@@ -969,11 +1035,16 @@ public:
       family_parameter_count()
     );
 
+    const Rcpp::RObject y_r = Rcpp::wrap(y);
+    const Rcpp::RObject mu_r = Rcpp::wrap(mu);
+    const Rcpp::RObject family_parameters_r =
+      Rcpp::wrap(family_parameters);
+
     negloglik = require_scalar_result(
       negloglik_(
-        Rcpp::wrap(y),
-        Rcpp::wrap(mu),
-        Rcpp::wrap(family_parameters),
+        y_r,
+        mu_r,
+        family_parameters_r,
         environment_
       ),
       family_name_ + "/" + link_name_,
@@ -1023,14 +1094,22 @@ public:
     const std::string plugin_name =
       family_name_ + "/" + link_name_;
 
+    const Rcpp::RObject y_r = Rcpp::wrap(y);
+    const Rcpp::RObject eta_r = Rcpp::wrap(eta);
+    const Rcpp::RObject mu_r = Rcpp::wrap(mu);
+    const Rcpp::RObject family_parameters_r =
+      Rcpp::wrap(family_parameters);
+    const Rcpp::RObject link_parameters_r =
+      Rcpp::wrap(link_parameters);
+
     const Rcpp::List result =
       require_list_result(
         grad_(
-          Rcpp::wrap(y),
-          Rcpp::wrap(eta),
-          Rcpp::wrap(mu),
-          Rcpp::wrap(family_parameters),
-          Rcpp::wrap(link_parameters),
+          y_r,
+          eta_r,
+          mu_r,
+          family_parameters_r,
+          link_parameters_r,
           environment_
         ),
         plugin_name,
@@ -1156,9 +1235,14 @@ public:
       const EgmifsControl& control
   ) const override
   {
+    const Rcpp::List input_r =
+      input_to_list(input);
+    const Rcpp::List control_r =
+      control_to_list(control);
+
     prepare_(
-      input_to_list(input),
-      control_to_list(control),
+      input_r,
+      control_r,
       environment_
     );
   }
@@ -1169,11 +1253,18 @@ public:
       const EgmifsState& state
   ) const override
   {
+    const Rcpp::List input_r =
+      input_to_list(input);
+    const Rcpp::List control_r =
+      control_to_list(control);
+    const Rcpp::List state_r =
+      state_to_list(state);
+
     return require_scalar_result(
       evaluate_(
-        input_to_list(input),
-        control_to_list(control),
-        state_to_list(state),
+        input_r,
+        control_r,
+        state_r,
         environment_
       ),
       name_,
